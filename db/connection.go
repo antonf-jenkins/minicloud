@@ -21,6 +21,9 @@ import (
 	"context"
 	backend "github.com/coreos/etcd/clientv3"
 	"log"
+	"github.com/antonf/minicloud/env"
+	"strings"
+	"time"
 )
 
 type RawValue struct {
@@ -79,6 +82,16 @@ func (db *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string, res
 	}()
 }
 
-func Conn() Connection {
-	return &etcdConeection{globalEtcdConn}
+func NewConnection() Connection {
+	log.Printf("db: init: connecting to %s, timeout %dms...", env.EtcdEndpoints, env.EtcdDialTimeout)
+	cli, err := backend.New(backend.Config{
+		Endpoints:   strings.Split(env.EtcdEndpoints, ","),
+		DialTimeout: time.Duration(env.EtcdDialTimeout) * time.Millisecond,
+	})
+	if err != nil {
+		log.Fatalf("db: init: failed to connect to etcd cluster: %s", err)
+	}
+
+	log.Printf("db: init: connected to etcd cluster")
+	return &etcdConeection{cli}
 }

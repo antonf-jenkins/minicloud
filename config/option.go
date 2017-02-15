@@ -92,12 +92,6 @@ func registerOpt(opt option) {
 	if _, ok := options[hdr.name]; ok {
 		log.Fatalf("config: opt '%s' already exists", hdr.name)
 	}
-	key := fmt.Sprintf("%s/%s", GlobalPrefix, hdr.name)
-	if rawValue, err := db.Conn().RawRead(context.Background(), key); err != nil {
-		fmt.Printf("config: error getting opt '%s' initial value: %s", hdr.name, err)
-	} else {
-		updateOption(opt, rawValue)
-	}
 	options[hdr.name] = opt
 }
 
@@ -113,6 +107,17 @@ func processConfigEvents(ctx context.Context, rawValueCh chan *db.RawValue) {
 		}
 	}
 }
+
+func initializeOpt(ctx context.Context, opt option, conn db.Connection) {
+	hdr := opt.headerPtr()
+	key := fmt.Sprintf("%s/%s", GlobalPrefix, hdr.name)
+	if rawValue, err := conn.RawRead(ctx, key); err != nil {
+		fmt.Printf("config: error getting opt '%s' initial value: %s", hdr.name, err)
+	} else {
+		updateOption(opt, rawValue)
+	}
+}
+
 
 func updateOption(opt option, rawValue *db.RawValue) {
 	hdr := opt.headerPtr()
@@ -155,8 +160,13 @@ func getOption(rawValue *db.RawValue) option {
 
 func init() {
 	options = make(map[string]option)
+}
+
+func InitOptions(ctx context.Context, conn db.Connection) {
 	rawValCh := make(chan *db.RawValue)
-	ctx := context.Background()
-	db.Conn().RawWatchPrefix(ctx, GlobalPrefix, rawValCh)
+	conn.RawWatchPrefix(ctx, GlobalPrefix, rawValCh)
+	for _, opt := range options {
+		initializeOpt(ctx, opt, conn)
+	}
 	go processConfigEvents(ctx, rawValCh)
 }
