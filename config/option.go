@@ -78,9 +78,16 @@ func (hdr *header) update(curValRv, newValRv reflect.Value) bool {
 	return true
 }
 
+func (hdr *header) checkInitialized() {
+	if hdr.rev < 0 {
+		log.Fatalf("config: opt: value used before init")
+	}
+}
+
 func newHeader(name string) header {
 	return header{
 		name:      name,
+		rev:       -1,
 		listeners: make(map[int]func(interface{})),
 	}
 }

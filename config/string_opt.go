@@ -31,6 +31,7 @@ type implStringOpt struct {
 func (o *implStringOpt) Value() string {
 	o.Lock()
 	defer o.Unlock()
+	o.checkInitialized()
 	return o.CurrentValue
 }
 
