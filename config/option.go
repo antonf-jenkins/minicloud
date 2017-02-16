@@ -28,7 +28,7 @@ import (
 	"sync"
 )
 
-const GlobalPrefix = "/minicloud/config"
+const GlobalConfigPrefix = "/minicloud/config/global"
 
 type CancelFunc func()
 
@@ -117,7 +117,7 @@ func processConfigEvents(ctx context.Context, rawValueCh chan *db.RawValue) {
 
 func initializeOpt(ctx context.Context, opt option, conn db.Connection) {
 	hdr := opt.headerPtr()
-	key := fmt.Sprintf("%s/%s", GlobalPrefix, hdr.name)
+	key := fmt.Sprintf("%s/%s", GlobalConfigPrefix, hdr.name)
 	if rawValue, err := conn.RawRead(ctx, key); err != nil {
 		fmt.Printf("config: error getting opt '%s' initial value: %s", hdr.name, err)
 	} else {
@@ -170,7 +170,7 @@ func init() {
 
 func InitOptions(ctx context.Context, conn db.Connection) {
 	rawValCh := make(chan *db.RawValue)
-	conn.RawWatchPrefix(ctx, GlobalPrefix, rawValCh)
+	conn.RawWatchPrefix(ctx, GlobalConfigPrefix, rawValCh)
 	for _, opt := range options {
 		initializeOpt(ctx, opt, conn)
 	}
