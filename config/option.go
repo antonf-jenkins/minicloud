@@ -125,7 +125,6 @@ func initializeOpt(ctx context.Context, opt option, conn db.Connection) {
 	}
 }
 
-
 func updateOption(opt option, rawValue *db.RawValue) {
 	hdr := opt.headerPtr()
 	hdr.Lock()

@@ -19,9 +19,9 @@ package db
 
 import (
 	"context"
+	"github.com/antonf/minicloud/env"
 	backend "github.com/coreos/etcd/clientv3"
 	"log"
-	"github.com/antonf/minicloud/env"
 	"strings"
 	"time"
 )

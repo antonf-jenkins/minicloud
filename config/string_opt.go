@@ -20,7 +20,7 @@ package config
 type StringOpt interface {
 	option
 	Value() string
-	Listen(callback func (newVal string)) CancelFunc
+	Listen(callback func(newVal string)) CancelFunc
 }
 
 type implStringOpt struct {
@@ -35,7 +35,7 @@ func (o *implStringOpt) Value() string {
 	return o.CurrentValue
 }
 
-func (o *implStringOpt) Listen(callback func (newVal string)) CancelFunc {
+func (o *implStringOpt) Listen(callback func(newVal string)) CancelFunc {
 	return o.listenImpl(func(newVal interface{}) {
 		callback(newVal.(string))
 	})
@@ -43,7 +43,7 @@ func (o *implStringOpt) Listen(callback func (newVal string)) CancelFunc {
 
 func NewStringOpt(name string, defaultValue string) StringOpt {
 	option := &implStringOpt{
-		header: newHeader(name),
+		header:       newHeader(name),
 		CurrentValue: defaultValue,
 		DefaultValue: defaultValue,
 	}
