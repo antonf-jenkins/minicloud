@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/antonf/minicloud/utils"
 	backend "github.com/coreos/etcd/clientv3"
 	"github.com/oklog/ulid"
 	"log"
@@ -38,12 +39,14 @@ type Entity interface {
 	setCreateRev(rev int64)
 	modifyRev() int64
 	setModifyRev(rev int64)
+	setOriginal(entity Entity)
 }
 
 type EntityHeader struct {
 	SchemaVersion int64
-	CreateRev     int64 `json:"-"`
-	ModifyRev     int64 `json:"-"`
+	CreateRev     int64  `json:"-"`
+	ModifyRev     int64  `json:"-"`
+	original      Entity `json:"-"`
 }
 
 // Method returning create revision to satisfy Entity interface
@@ -64,6 +67,10 @@ func (hdr *EntityHeader) modifyRev() int64 {
 // Method setting modify revision to satisfy Entity interface
 func (hdr *EntityHeader) setModifyRev(rev int64) {
 	hdr.ModifyRev = rev
+}
+
+func (hdr *EntityHeader) setOriginal(entity Entity) {
+	hdr.original = entity
 }
 
 func getEntityId(entity Entity) ulid.ULID {
@@ -107,5 +114,6 @@ func (db *etcdConeection) loadEntity(ctx context.Context, entity Entity) error {
 	}
 	entity.setCreateRev(kv.CreateRevision)
 	entity.setModifyRev(kv.ModRevision)
+	entity.setOriginal(utils.MakeStructCopy(entity).(Entity))
 	return nil
 }

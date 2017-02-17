@@ -29,7 +29,7 @@ type FieldError struct {
 }
 
 func (e *FieldError) Error() string {
-	return ""
+	return fmt.Sprintf("%s.%s invalid: %s", e.Entity, e.Field, e.Message)
 }
 
 func checkFieldRegexp(entity, field, value string, regexp *regexp.Regexp) error {

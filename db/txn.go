@@ -33,7 +33,8 @@ type Transaction interface {
 	Update(value Entity)
 	Delete(value Entity)
 	ForceDelete(entity string, id ulid.ULID)
-	EnforceUnique(value Entity, field string)
+	ClaimUnique(value Entity, field string)
+	ForfeitUnique(entity Entity, field string)
 }
 
 func (c *etcdConeection) NewTransaction() Transaction {
@@ -128,15 +129,28 @@ func (t *etcdTransaction) ForceDelete(entityName string, id ulid.ULID) {
 	t.addOp(backend.OpDelete(key))
 }
 
-func (t *etcdTransaction) EnforceUnique(entity Entity, field string) {
+func (t *etcdTransaction) ClaimUnique(entity Entity, field string) {
 	if t.err != nil {
 		return
 	}
 	entityName := getEntityName(entity)
 	fieldValue := utils.GetFieldValue(entity, field)
-	log.Printf("db: txn %s: enforce unique entity=%s field=%s value='%s'", t.xid, entityName, field, fieldValue)
+	log.Printf("db: txn %s: claim unique entity=%s field=%s value='%s'", t.xid, entityName, field, fieldValue)
 	key := fmt.Sprintf("%s/%s/%s/%s", MetaPrefix, entityName, field, fieldValue)
 	entityId := getEntityId(entity).String()
 	t.addCmp(backend.Version(key), "=", 0)
 	t.addOp(backend.OpPut(key, entityId))
+}
+
+func (t *etcdTransaction) ForfeitUnique(entity Entity, field string) {
+	if t.err != nil {
+		return
+	}
+	entityName := getEntityName(entity)
+	fieldValue := utils.GetFieldValue(entity, field)
+	log.Printf("db: txn %s: forfeit unique entity=%s field=%s value='%s'", t.xid, entityName, field, fieldValue)
+	key := fmt.Sprintf("%s/%s/%s/%s", MetaPrefix, entityName, field, fieldValue)
+	entityId := getEntityId(entity).String()
+	t.addCmp(backend.Value(key), "=", entityId)
+	t.addOp(backend.OpDelete(key))
 }

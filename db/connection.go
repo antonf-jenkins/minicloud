@@ -21,6 +21,7 @@ import (
 	"context"
 	"github.com/antonf/minicloud/env"
 	backend "github.com/coreos/etcd/clientv3"
+	"github.com/oklog/ulid"
 	"log"
 	"strings"
 	"time"
@@ -35,6 +36,12 @@ type RawValue struct {
 type Connection interface {
 	RawRead(ctx context.Context, key string) (*RawValue, error)
 	RawWatchPrefix(ctx context.Context, prefix string, resultCh chan *RawValue)
+
+	// Project CRUD
+	GetProject(ctx context.Context, id ulid.ULID) (*Project, error)
+	CreateProject(ctx context.Context, proj *Project) error
+	UpdateProject(ctx context.Context, proj *Project) error
+	DeleteProject(ctx context.Context, id ulid.ULID) error
 }
 
 type etcdConeection struct {

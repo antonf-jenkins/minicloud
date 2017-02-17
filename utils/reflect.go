@@ -30,3 +30,14 @@ func GetFieldValue(structVal interface{}, field string) interface{} {
 	}
 	return fieldRv.Interface()
 }
+
+// Returns interface containing pointer to copy of original struct value
+func MakeStructCopy(value interface{}) interface{} {
+	origRv := reflect.ValueOf(value)
+	if origRv.Kind() == reflect.Ptr {
+		origRv = origRv.Elem()
+	}
+	copyRv := reflect.New(origRv.Type())
+	copyRv.Elem().Set(origRv)
+	return copyRv.Interface()
+}
