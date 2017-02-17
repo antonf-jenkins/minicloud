@@ -18,18 +18,18 @@
 package db
 
 import (
+	"context"
+	"fmt"
+	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
 	"regexp"
-	"fmt"
-	"context"
-	"github.com/antonf/minicloud/utils"
 )
 
 type Image struct {
 	EntityHeader
-	Id ulid.ULID
+	Id        ulid.ULID
 	ProjectId ulid.ULID
-	Name string
+	Name      string
 }
 
 var regexpImageName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")

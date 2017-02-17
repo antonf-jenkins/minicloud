@@ -22,16 +22,16 @@ import (
 	"fmt"
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
-	"regexp"
 	"reflect"
+	"regexp"
 )
 
 var regexpProjectName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")
 
 type Project struct {
 	EntityHeader
-	Id   ulid.ULID
-	Name string
+	Id       ulid.ULID
+	Name     string
 	ImageIds []ulid.ULID
 }
 
