@@ -31,13 +31,31 @@ func GetFieldValue(structVal interface{}, field string) interface{} {
 	return fieldRv.Interface()
 }
 
+func DeepCopy(src, dst reflect.Value) {
+	switch src.Kind() {
+	case reflect.Struct:
+		dst.Set(src)
+		for i := 0; i < src.NumField(); i++ {
+			DeepCopy(src.Field(i), dst.Field(i))
+		}
+	case reflect.Ptr:
+		DeepCopy(src.Elem(), dst.Elem())
+	case reflect.Slice:
+		dst.Set(reflect.MakeSlice(src.Type(), src.Len(), src.Len()))
+		for i := 0; i < src.Len(); i++ {
+			DeepCopy(src.Index(i), dst.Index(i))
+		}
+	default:
+		if src.CanSet() {
+			dst.Set(src)
+		}
+	}
+}
+
 // Returns interface containing pointer to copy of original struct value
 func MakeStructCopy(value interface{}) interface{} {
 	origRv := reflect.ValueOf(value)
-	if origRv.Kind() == reflect.Ptr {
-		origRv = origRv.Elem()
-	}
-	copyRv := reflect.New(origRv.Type())
-	copyRv.Elem().Set(origRv)
+	copyRv := reflect.New(origRv.Elem().Type())
+	DeepCopy(origRv, copyRv)
 	return copyRv.Interface()
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
 	"regexp"
+	"reflect"
 )
 
 var regexpProjectName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")
@@ -31,6 +32,7 @@ type Project struct {
 	EntityHeader
 	Id   ulid.ULID
 	Name string
+	ImageIds []ulid.ULID
 }
 
 func (p Project) String() string {
@@ -43,15 +45,24 @@ func (p *Project) validate() error {
 	if err := checkFieldRegexp("project", "Name", p.Name, regexpProjectName); err != nil {
 		return err
 	}
+	if len(p.ImageIds) > 0 {
+		return &FieldError{"project", "ImageIds", "Should be empty"}
+	}
 	return nil
 }
 
 func (p *Project) validateUpdate() error {
+	if err := checkFieldRegexp("project", "Name", p.Name, regexpProjectName); err != nil {
+		return err
+	}
 	origVal := p.original.(*Project)
 	if p.Id != origVal.Id {
 		return &FieldError{"project", "Id", "Field is read-only"}
 	}
-	return p.validate()
+	if !reflect.DeepEqual(origVal.ImageIds, p.ImageIds) {
+		return &FieldError{"project", "ImageIds", "Field is read-only"}
+	}
+	return nil
 }
 
 func (c *etcdConeection) GetProject(ctx context.Context, id ulid.ULID) (*Project, error) {
@@ -91,6 +102,9 @@ func (c *etcdConeection) DeleteProject(ctx context.Context, id ulid.ULID) error 
 	proj, err := c.GetProject(ctx, id)
 	if err != nil {
 		return nil
+	}
+	if len(proj.ImageIds) != 0 {
+		return &FieldError{"project", "ImageIds", "Can't delete non-empty project"}
 	}
 	txn := c.NewTransaction()
 	txn.ForfeitUnique(proj, "Name")

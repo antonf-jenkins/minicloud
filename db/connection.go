@@ -42,6 +42,12 @@ type Connection interface {
 	CreateProject(ctx context.Context, proj *Project) error
 	UpdateProject(ctx context.Context, proj *Project) error
 	DeleteProject(ctx context.Context, id ulid.ULID) error
+
+	// Image CRUD
+	GetImage(ctx context.Context, id ulid.ULID) (*Image, error)
+	CreateImage(ctx context.Context, img *Image) error
+	UpdateImage(ctx context.Context, img *Image) error
+	DeleteImage(ctx context.Context, id ulid.ULID) error
 }
 
 type etcdConeection struct {

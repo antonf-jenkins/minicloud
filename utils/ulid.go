@@ -25,3 +25,15 @@ import (
 func NewULID() ulid.ULID {
 	return ulid.MustNew(ulid.Now(), rand.Reader)
 }
+
+func RemoveULID(list []ulid.ULID, item ulid.ULID) []ulid.ULID {
+	for idx, elem := range list {
+		if elem == item {
+			listLen := len(list)
+			list[idx] = list[listLen - 1]
+			list = list[:listLen - 1]
+			return list
+		}
+	}
+	return list
+}
