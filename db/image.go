@@ -58,6 +58,14 @@ func (img *Image) validateUpdate() error {
 	return img.validate()
 }
 
+func (img *Image) claimUniqueName(txn Transaction) {
+	txn.ClaimUnique(img, "name", img.ProjectId.String(), img.Name)
+}
+
+func (img *Image) forfeitUniqueName(txn Transaction) {
+	txn.ForfeitUnique(img, "name", img.ProjectId.String(), img.Name)
+}
+
 func (c *etcdConeection) GetImage(ctx context.Context, id ulid.ULID) (*Image, error) {
 	img := &Image{Id: id}
 	if err := c.loadEntity(ctx, img); err != nil {
@@ -81,6 +89,7 @@ func (c *etcdConeection) CreateImage(ctx context.Context, img *Image) error {
 	txn := c.NewTransaction()
 	txn.Create(img)
 	txn.Update(proj)
+	img.claimUniqueName(txn)
 	return txn.Commit(ctx)
 }
 
@@ -88,7 +97,12 @@ func (c *etcdConeection) UpdateImage(ctx context.Context, img *Image) error {
 	if err := img.validateUpdate(); err != nil {
 		return err
 	}
+	origImg := img.original.(*Image)
 	txn := c.NewTransaction()
+	if origImg.Name != img.Name {
+		origImg.forfeitUniqueName(txn)
+		img.claimUniqueName(txn)
+	}
 	txn.Update(img)
 	return txn.Commit(ctx)
 }
@@ -105,6 +119,7 @@ func (c *etcdConeection) DeleteImage(ctx context.Context, id ulid.ULID) error {
 	proj.ImageIds = utils.RemoveULID(proj.ImageIds, img.Id)
 
 	txn := c.NewTransaction()
+	img.forfeitUniqueName(txn)
 	txn.Delete(img)
 	txn.Update(proj)
 	return txn.Commit(ctx)

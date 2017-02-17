@@ -25,16 +25,17 @@ import (
 	backend "github.com/coreos/etcd/clientv3"
 	"github.com/oklog/ulid"
 	"log"
+	"strings"
 )
 
 type Transaction interface {
 	Commit(ctx context.Context) error
-	Create(value Entity)
-	Update(value Entity)
-	Delete(value Entity)
+	Create(entity Entity)
+	Update(entity Entity)
+	Delete(entity Entity)
 	ForceDelete(entity string, id ulid.ULID)
-	ClaimUnique(value Entity, field string)
-	ForfeitUnique(entity Entity, field string)
+	ClaimUnique(entity Entity, spec ...string)
+	ForfeitUnique(entity Entity, spec ...string)
 }
 
 func (c *etcdConeection) NewTransaction() Transaction {
@@ -129,27 +130,29 @@ func (t *etcdTransaction) ForceDelete(entityName string, id ulid.ULID) {
 	t.addOp(backend.OpDelete(key))
 }
 
-func (t *etcdTransaction) ClaimUnique(entity Entity, field string) {
+func metaKey(name string, spec []string) string {
+	return fmt.Sprintf("%s/%s/%s", MetaPrefix, name, strings.Join(spec, "/"))
+}
+
+func (t *etcdTransaction) ClaimUnique(entity Entity, spec ...string) {
 	if t.err != nil {
 		return
 	}
 	entityName := getEntityName(entity)
-	fieldValue := utils.GetFieldValue(entity, field)
-	log.Printf("db: txn %s: claim unique entity=%s field=%s value='%s'", t.xid, entityName, field, fieldValue)
-	key := fmt.Sprintf("%s/%s/%s/%s", MetaPrefix, entityName, field, fieldValue)
+	key := metaKey(entityName, spec)
+	log.Printf("db: txn %s: claim unique entity=%s key=%s", t.xid, entityName, key)
 	entityId := getEntityId(entity).String()
 	t.addCmp(backend.Version(key), "=", 0)
 	t.addOp(backend.OpPut(key, entityId))
 }
 
-func (t *etcdTransaction) ForfeitUnique(entity Entity, field string) {
+func (t *etcdTransaction) ForfeitUnique(entity Entity, spec ...string) {
 	if t.err != nil {
 		return
 	}
 	entityName := getEntityName(entity)
-	fieldValue := utils.GetFieldValue(entity, field)
-	log.Printf("db: txn %s: forfeit unique entity=%s field=%s value='%s'", t.xid, entityName, field, fieldValue)
-	key := fmt.Sprintf("%s/%s/%s/%s", MetaPrefix, entityName, field, fieldValue)
+	key := metaKey(entityName, spec)
+	log.Printf("db: txn %s: forfeit unique entity=%s key=%s", t.xid, entityName, key)
 	entityId := getEntityId(entity).String()
 	t.addCmp(backend.Value(key), "=", entityId)
 	t.addOp(backend.OpDelete(key))

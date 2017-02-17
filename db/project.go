@@ -65,6 +65,14 @@ func (p *Project) validateUpdate() error {
 	return nil
 }
 
+func (p *Project) claimUniqueName(txn Transaction) {
+	txn.ClaimUnique(p, "name", p.Name)
+}
+
+func (p *Project) forfeitUniqueName(txn Transaction) {
+	txn.ForfeitUnique(p, "name", p.Name)
+}
+
 func (c *etcdConeection) GetProject(ctx context.Context, id ulid.ULID) (*Project, error) {
 	proj := &Project{Id: id}
 	if err := c.loadEntity(ctx, proj); err != nil {
@@ -80,7 +88,7 @@ func (c *etcdConeection) CreateProject(ctx context.Context, proj *Project) error
 	proj.Id = utils.NewULID()
 	txn := c.NewTransaction()
 	txn.Create(proj)
-	txn.ClaimUnique(proj, "Name")
+	proj.claimUniqueName(txn)
 	return txn.Commit(ctx)
 }
 
@@ -92,8 +100,8 @@ func (c *etcdConeection) UpdateProject(ctx context.Context, proj *Project) error
 	txn := c.NewTransaction()
 	txn.Update(proj)
 	if origProj.Name != proj.Name {
-		txn.ForfeitUnique(origProj, "Name")
-		txn.ClaimUnique(proj, "Name")
+		origProj.forfeitUniqueName(txn)
+		proj.claimUniqueName(txn)
 	}
 	return txn.Commit(ctx)
 }
@@ -107,7 +115,7 @@ func (c *etcdConeection) DeleteProject(ctx context.Context, id ulid.ULID) error 
 		return &FieldError{"project", "ImageIds", "Can't delete non-empty project"}
 	}
 	txn := c.NewTransaction()
-	txn.ForfeitUnique(proj, "Name")
+	proj.forfeitUniqueName(txn)
 	txn.Delete(proj)
 	return txn.Commit(ctx)
 }
