@@ -138,10 +138,10 @@ func (t *etcdTransaction) ClaimUnique(entity Entity, spec ...string) {
 	if t.err != nil {
 		return
 	}
-	entityName := getEntityName(entity)
+	entityName := GetEntityName(entity)
 	key := metaKey(entityName, spec)
 	log.Printf("db: txn %s: claim unique entity=%s key=%s", t.xid, entityName, key)
-	entityId := getEntityId(entity).String()
+	entityId := GetEntityId(entity).String()
 	t.addCmp(backend.Version(key), "=", 0)
 	t.addOp(backend.OpPut(key, entityId))
 }
@@ -150,10 +150,10 @@ func (t *etcdTransaction) ForfeitUnique(entity Entity, spec ...string) {
 	if t.err != nil {
 		return
 	}
-	entityName := getEntityName(entity)
+	entityName := GetEntityName(entity)
 	key := metaKey(entityName, spec)
 	log.Printf("db: txn %s: forfeit unique entity=%s key=%s", t.xid, entityName, key)
-	entityId := getEntityId(entity).String()
+	entityId := GetEntityId(entity).String()
 	t.addCmp(backend.Value(key), "=", entityId)
 	t.addOp(backend.OpDelete(key))
 }

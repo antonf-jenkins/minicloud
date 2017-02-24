@@ -73,7 +73,7 @@ func (hdr *EntityHeader) setOriginal(entity Entity) {
 	hdr.original = entity
 }
 
-func getEntityId(entity Entity) ulid.ULID {
+func GetEntityId(entity Entity) ulid.ULID {
 	entityRv := reflect.ValueOf(entity)
 	if entityRv.Kind() == reflect.Ptr {
 		entityRv = entityRv.Elem()
@@ -81,7 +81,7 @@ func getEntityId(entity Entity) ulid.ULID {
 	return entityRv.FieldByName("Id").Interface().(ulid.ULID)
 }
 
-func getEntityName(entity Entity) string {
+func GetEntityName(entity Entity) string {
 	ty := reflect.TypeOf(entity)
 	if ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
@@ -90,12 +90,12 @@ func getEntityName(entity Entity) string {
 }
 
 func dataKey(entity Entity) string {
-	return fmt.Sprintf("%s/%s/%s", DataPrefix, getEntityName(entity), getEntityId(entity))
+	return fmt.Sprintf("%s/%s/%s", DataPrefix, GetEntityName(entity), GetEntityId(entity))
 }
 
 func (db *etcdConeection) loadEntity(ctx context.Context, entity Entity) error {
-	entityName := getEntityName(entity)
-	entityId := getEntityId(entity)
+	entityName := GetEntityName(entity)
+	entityId := GetEntityId(entity)
 	key := dataKey(entity)
 	log.Printf("db: loading entity=%s id=%s key=%s", entityName, entityId, key)
 	resp, err := db.client.Get(ctx, key, backend.WithSerializable())
