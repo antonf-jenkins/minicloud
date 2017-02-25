@@ -38,17 +38,8 @@ func (api *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func (api *Server) MountPoint(path string) *MountPoint {
 	curNode := api.root
-outer:
 	for elem, rest := nextPathElem(strings.Trim(path, "/")); elem != ""; elem, rest = nextPathElem(rest) {
-		for _, nextNode := range curNode.children {
-			if nextNode.source == elem {
-				curNode = nextNode
-				continue outer
-			}
-		}
-		nextNode := newMountPoint(elem)
-		curNode.children = append(curNode.children, nextNode)
-		curNode = nextNode
+		curNode = curNode.Child(elem)
 	}
 	return curNode
 }

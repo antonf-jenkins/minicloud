@@ -53,3 +53,12 @@ func nextLen(chain *link) int {
 		return chain.len + 1
 	}
 }
+
+func writeError(w http.ResponseWriter, err error) {
+	// TODO: respond with different status codes depending on error
+	w.Header().Add(HeaderContentType, ContentTypePlaintext)
+	w.WriteHeader(http.StatusInternalServerError)
+	w.Write([]byte("Error: "))
+	w.Write([]byte(err.Error()))
+	w.Write([]byte("\n"))
+}

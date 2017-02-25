@@ -99,6 +99,17 @@ func (mp *MountPoint) Mount(method string, handler Handler) {
 	mp.handlers[method] = handler
 }
 
+func (mp *MountPoint) Child(elem string) *MountPoint {
+	for _, nextNode := range mp.children {
+		if nextNode.source == elem {
+			return nextNode
+		}
+	}
+	nextNode := newMountPoint(elem)
+	mp.children = append(mp.children, nextNode)
+	return nextNode
+}
+
 func newMountPoint(source string) *MountPoint {
 	return &MountPoint{
 		handlers: make(map[string]Handler),
