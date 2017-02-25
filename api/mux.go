@@ -110,6 +110,26 @@ func (mp *MountPoint) Child(elem string) *MountPoint {
 	return nextNode
 }
 
+func (mp *MountPoint) MountManager(manager interface{}) {
+	mh := adaptManager(manager)
+	if mh.listRv.IsValid() {
+		mp.Mount("GET", mh.handleList)
+	}
+	if mh.postRv.IsValid() {
+		mp.Mount("POST", mh.handlePost)
+	}
+	childMp := mp.Child("{id:ulid}")
+	if mh.getRv.IsValid() {
+		childMp.Mount("GET", mh.handleGet)
+	}
+	if mh.putRv.IsValid() {
+		childMp.Mount("PUT", mh.handlePut)
+	}
+	if mh.deleteRv.IsValid() {
+		childMp.Mount("DELETE", mh.handleDelete)
+	}
+}
+
 func newMountPoint(source string) *MountPoint {
 	return &MountPoint{
 		handlers: make(map[string]Handler),

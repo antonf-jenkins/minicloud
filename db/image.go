@@ -26,6 +26,7 @@ import (
 )
 
 type ImageManager interface {
+	NewEntity() *Image
 	Get(ctx context.Context, id ulid.ULID) (*Image, error)
 	Create(ctx context.Context, img *Image) error
 	Update(ctx context.Context, img *Image) error
@@ -75,6 +76,12 @@ func (img *Image) forfeitUniqueName(txn Transaction) {
 
 type etcdImageManager struct {
 	conn *etcdConeection
+}
+
+func (pm *etcdImageManager) NewEntity() *Image {
+	return &Image{
+		EntityHeader: EntityHeader{SchemaVersion: 1},
+	}
 }
 
 func (im *etcdImageManager) Get(ctx context.Context, id ulid.ULID) (*Image, error) {

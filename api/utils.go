@@ -18,7 +18,9 @@
 package api
 
 import (
+	"github.com/oklog/ulid"
 	"net/http"
+	"reflect"
 	"strings"
 )
 
@@ -61,4 +63,18 @@ func writeError(w http.ResponseWriter, err error) {
 	w.Write([]byte("Error: "))
 	w.Write([]byte(err.Error()))
 	w.Write([]byte("\n"))
+}
+
+func toError(rv reflect.Value) error {
+	if rv.IsNil() {
+		return nil
+	}
+	return rv.Interface().(error)
+}
+
+func getEntityId(rv reflect.Value) ulid.ULID {
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
+	}
+	return rv.FieldByName("Id").Interface().(ulid.ULID)
 }

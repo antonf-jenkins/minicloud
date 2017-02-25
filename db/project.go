@@ -29,6 +29,7 @@ import (
 var regexpProjectName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")
 
 type ProjectManager interface {
+	NewEntity() *Project
 	Get(ctx context.Context, id ulid.ULID) (*Project, error)
 	Create(ctx context.Context, proj *Project) error
 	Update(ctx context.Context, proj *Project) error
@@ -82,6 +83,12 @@ func (p *Project) forfeitUniqueName(txn Transaction) {
 
 type etcdProjectManager struct {
 	conn *etcdConeection
+}
+
+func (pm *etcdProjectManager) NewEntity() *Project {
+	return &Project{
+		EntityHeader: EntityHeader{SchemaVersion: 1},
+	}
 }
 
 func (pm *etcdProjectManager) Get(ctx context.Context, id ulid.ULID) (*Project, error) {
