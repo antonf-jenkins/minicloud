@@ -25,6 +25,13 @@ import (
 	"regexp"
 )
 
+type ImageManager interface {
+	Get(ctx context.Context, id ulid.ULID) (*Image, error)
+	Create(ctx context.Context, img *Image) error
+	Update(ctx context.Context, img *Image) error
+	Delete(ctx context.Context, id ulid.ULID) error
+}
+
 type Image struct {
 	EntityHeader
 	Id        ulid.ULID
@@ -66,19 +73,24 @@ func (img *Image) forfeitUniqueName(txn Transaction) {
 	txn.ForfeitUnique(img, "name", img.ProjectId.String(), img.Name)
 }
 
-func (c *etcdConeection) GetImage(ctx context.Context, id ulid.ULID) (*Image, error) {
+type etcdImageManager struct {
+	conn *etcdConeection
+}
+
+func (im *etcdImageManager) Get(ctx context.Context, id ulid.ULID) (*Image, error) {
 	img := &Image{Id: id}
-	if err := c.loadEntity(ctx, img); err != nil {
+	if err := im.conn.loadEntity(ctx, img); err != nil {
 		return nil, err
 	}
 	return img, nil
 }
 
-func (c *etcdConeection) CreateImage(ctx context.Context, img *Image) error {
+func (im *etcdImageManager) Create(ctx context.Context, img *Image) error {
 	if err := img.validate(); err != nil {
 		return err
 	}
-	proj, err := c.GetProject(ctx, img.ProjectId)
+	c := im.conn
+	proj, err := c.Projects().Get(ctx, img.ProjectId)
 	if err != nil {
 		return err
 	}
@@ -93,10 +105,11 @@ func (c *etcdConeection) CreateImage(ctx context.Context, img *Image) error {
 	return txn.Commit(ctx)
 }
 
-func (c *etcdConeection) UpdateImage(ctx context.Context, img *Image) error {
+func (im *etcdImageManager) Update(ctx context.Context, img *Image) error {
 	if err := img.validateUpdate(); err != nil {
 		return err
 	}
+	c := im.conn
 	origImg := img.original.(*Image)
 	txn := c.NewTransaction()
 	if origImg.Name != img.Name {
@@ -107,12 +120,13 @@ func (c *etcdConeection) UpdateImage(ctx context.Context, img *Image) error {
 	return txn.Commit(ctx)
 }
 
-func (c *etcdConeection) DeleteImage(ctx context.Context, id ulid.ULID) error {
-	img, err := c.GetImage(ctx, id)
+func (im *etcdImageManager) Delete(ctx context.Context, id ulid.ULID) error {
+	img, err := im.Get(ctx, id)
 	if err != nil {
 		return nil
 	}
-	proj, err := c.GetProject(ctx, img.ProjectId)
+	c := im.conn
+	proj, err := c.Projects().Get(ctx, img.ProjectId)
 	if err != nil {
 		return err
 	}

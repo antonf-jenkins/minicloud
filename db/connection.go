@@ -21,7 +21,6 @@ import (
 	"context"
 	"github.com/antonf/minicloud/env"
 	backend "github.com/coreos/etcd/clientv3"
-	"github.com/oklog/ulid"
 	"log"
 	"strings"
 	"time"
@@ -37,21 +36,22 @@ type Connection interface {
 	RawRead(ctx context.Context, key string) (*RawValue, error)
 	RawWatchPrefix(ctx context.Context, prefix string, resultCh chan *RawValue)
 
-	// Project CRUD
-	GetProject(ctx context.Context, id ulid.ULID) (*Project, error)
-	CreateProject(ctx context.Context, proj *Project) error
-	UpdateProject(ctx context.Context, proj *Project) error
-	DeleteProject(ctx context.Context, id ulid.ULID) error
-
-	// Image CRUD
-	GetImage(ctx context.Context, id ulid.ULID) (*Image, error)
-	CreateImage(ctx context.Context, img *Image) error
-	UpdateImage(ctx context.Context, img *Image) error
-	DeleteImage(ctx context.Context, id ulid.ULID) error
+	Projects() ProjectManager
+	Images() ImageManager
 }
 
 type etcdConeection struct {
-	client *backend.Client
+	client         *backend.Client
+	projectManager *etcdProjectManager
+	imageManager   *etcdImageManager
+}
+
+func (c *etcdConeection) Projects() ProjectManager {
+	return c.projectManager
+}
+
+func (c *etcdConeection) Images() ImageManager {
+	return c.imageManager
 }
 
 func (db *etcdConeection) RawRead(ctx context.Context, key string) (*RawValue, error) {
@@ -106,5 +106,8 @@ func NewConnection() Connection {
 	}
 
 	log.Printf("db: init: connected to etcd cluster")
-	return &etcdConeection{cli}
+	conn := &etcdConeection{client: cli}
+	conn.projectManager = &etcdProjectManager{conn}
+	conn.imageManager = &etcdImageManager{conn}
+	return conn
 }

@@ -28,6 +28,13 @@ import (
 
 var regexpProjectName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")
 
+type ProjectManager interface {
+	Get(ctx context.Context, id ulid.ULID) (*Project, error)
+	Create(ctx context.Context, proj *Project) error
+	Update(ctx context.Context, proj *Project) error
+	Delete(ctx context.Context, id ulid.ULID) error
+}
+
 type Project struct {
 	EntityHeader
 	Id       ulid.ULID
@@ -73,18 +80,23 @@ func (p *Project) forfeitUniqueName(txn Transaction) {
 	txn.ForfeitUnique(p, "name", p.Name)
 }
 
-func (c *etcdConeection) GetProject(ctx context.Context, id ulid.ULID) (*Project, error) {
+type etcdProjectManager struct {
+	conn *etcdConeection
+}
+
+func (pm *etcdProjectManager) Get(ctx context.Context, id ulid.ULID) (*Project, error) {
 	proj := &Project{Id: id}
-	if err := c.loadEntity(ctx, proj); err != nil {
+	if err := pm.conn.loadEntity(ctx, proj); err != nil {
 		return nil, err
 	}
 	return proj, nil
 }
 
-func (c *etcdConeection) CreateProject(ctx context.Context, proj *Project) error {
+func (pm *etcdProjectManager) Create(ctx context.Context, proj *Project) error {
 	if err := proj.validate(); err != nil {
 		return err
 	}
+	c := pm.conn
 	proj.Id = utils.NewULID()
 	txn := c.NewTransaction()
 	txn.Create(proj)
@@ -92,10 +104,11 @@ func (c *etcdConeection) CreateProject(ctx context.Context, proj *Project) error
 	return txn.Commit(ctx)
 }
 
-func (c *etcdConeection) UpdateProject(ctx context.Context, proj *Project) error {
+func (pm *etcdProjectManager) Update(ctx context.Context, proj *Project) error {
 	if err := proj.validateUpdate(); err != nil {
 		return err
 	}
+	c := pm.conn
 	origProj := proj.original.(*Project)
 	txn := c.NewTransaction()
 	txn.Update(proj)
@@ -106,14 +119,15 @@ func (c *etcdConeection) UpdateProject(ctx context.Context, proj *Project) error
 	return txn.Commit(ctx)
 }
 
-func (c *etcdConeection) DeleteProject(ctx context.Context, id ulid.ULID) error {
-	proj, err := c.GetProject(ctx, id)
+func (pm *etcdProjectManager) Delete(ctx context.Context, id ulid.ULID) error {
+	proj, err := pm.Get(ctx, id)
 	if err != nil {
 		return nil
 	}
 	if len(proj.ImageIds) != 0 {
 		return &FieldError{"project", "ImageIds", "Can't delete non-empty project"}
 	}
+	c := pm.conn
 	txn := c.NewTransaction()
 	proj.forfeitUniqueName(txn)
 	txn.Delete(proj)
