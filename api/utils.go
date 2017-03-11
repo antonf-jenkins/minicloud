@@ -18,10 +18,16 @@
 package api
 
 import (
+	"github.com/antonf/minicloud/config"
 	"github.com/oklog/ulid"
+	"log"
 	"net/http"
 	"reflect"
 	"strings"
+)
+
+var (
+	OptRetryCount = config.NewIntOpt("retry_count", 5)
 )
 
 func Respond404(w http.ResponseWriter) {
@@ -77,4 +83,16 @@ func getEntityId(rv reflect.Value) ulid.ULID {
 		rv = rv.Elem()
 	}
 	return rv.FieldByName("Id").Interface().(ulid.ULID)
+}
+
+func retry(operationFn func() error) (err error) {
+	retryCount := OptRetryCount.Value()
+	for i := 0; i < retryCount; i++ {
+		if err = operationFn(); err != nil {
+			log.Printf("api: operation failed attempt=%s: %s", i, err)
+		} else {
+			return
+		}
+	}
+	return
 }

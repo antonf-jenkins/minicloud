@@ -20,6 +20,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"github.com/antonf/minicloud/fsm"
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
 	"regexp"
@@ -38,9 +39,21 @@ type Image struct {
 	Id        ulid.ULID
 	ProjectId ulid.ULID
 	Name      string
+	State     fsm.State
+	Checksum  string
 }
 
-var regexpImageName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")
+var (
+	regexpImageName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")
+	imageFSM        = fsm.NewStateMachine(
+		fsm.StateCreated, fsm.StateUploading,
+		fsm.StateUploading, fsm.StateReady,
+
+		fsm.StateCreated, fsm.StateError,
+		fsm.StateUploading, fsm.StateError,
+		fsm.StateReady, fsm.StateError,
+	).AddInitialState(fsm.StateCreated)
+)
 
 func (img *Image) String() string {
 	return fmt.Sprintf(
@@ -63,6 +76,9 @@ func (img *Image) validateUpdate() error {
 	if img.ProjectId != origVal.ProjectId {
 		return &FieldError{"image", "ProjectId", "Field is read-only"}
 	}
+	if err := imageFSM.CheckTransition(origVal.State, img.State); err != nil {
+		return err
+	}
 	return img.validate()
 }
 
@@ -81,6 +97,7 @@ type etcdImageManager struct {
 func (pm *etcdImageManager) NewEntity() *Image {
 	return &Image{
 		EntityHeader: EntityHeader{SchemaVersion: 1},
+		State:        fsm.StateCreated,
 	}
 }
 
