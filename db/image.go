@@ -65,6 +65,9 @@ func (img *Image) validate() error {
 	if err := checkFieldRegexp("image", "Name", img.Name, regexpImageName); err != nil {
 		return err
 	}
+	if err := imageFSM.CheckInitialState(img.State); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -79,7 +82,10 @@ func (img *Image) validateUpdate() error {
 	if err := imageFSM.CheckTransition(origVal.State, img.State); err != nil {
 		return err
 	}
-	return img.validate()
+	if err := checkFieldRegexp("image", "Name", img.Name, regexpImageName); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (img *Image) claimUniqueName(txn Transaction) {

@@ -79,6 +79,9 @@ func (sm *StateMachine) CheckInitialState(state State) error {
 }
 
 func (sm *StateMachine) CheckTransition(from, to State) error {
+	if from == to {
+		return nil
+	}
 	trans := sm.transitions[from]
 	if trans != nil {
 		if trans[to] {
