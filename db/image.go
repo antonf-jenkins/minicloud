@@ -46,9 +46,10 @@ type Image struct {
 var (
 	regexpImageName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")
 	imageFSM        = fsm.NewStateMachine(
+		fsm.StateCreated, fsm.StateCreated, // Allow update in created state
 		fsm.StateCreated, fsm.StateUploading,
 		fsm.StateUploading, fsm.StateReady,
-
+		fsm.StateReady, fsm.StateReady, // Allow update in ready state
 		fsm.StateCreated, fsm.StateError,
 		fsm.StateUploading, fsm.StateError,
 		fsm.StateReady, fsm.StateError,
