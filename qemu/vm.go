@@ -15,42 +15,53 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package utils
+package qemu
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"github.com/oklog/ulid"
+	"os"
+	"os/exec"
 )
 
-func NewULID() ulid.ULID {
-	return ulid.MustNew(ulid.Now(), rand.Reader)
+type DiskCache string
+
+const (
+	CacheWriteThrough DiskCache = "writethrough"
+	CacheWriteBack    DiskCache = "writeback"
+	CacheNone         DiskCache = "none"
+	CacheUnsafe       DiskCache = "unsafe"
+	CacheDirectSync   DiskCache = "directsync"
+)
+
+type NetworkDevice struct {
+	InterfaceName string
+	MacAddress    string
 }
 
-func RemoveULID(list []ulid.ULID, item ulid.ULID) []ulid.ULID {
-	for idx, elem := range list {
-		if elem == item {
-			listLen := len(list)
-			list[idx] = list[listLen-1]
-			list = list[:listLen-1]
-			return list
-		}
+type StorageDevice struct {
+	Pool  string
+	Disk  string
+	Cache DiskCache
+}
+
+type VirtualMachine struct {
+	Id       ulid.ULID
+	VncPort  int
+	Cpu      string
+	Root     string
+	Nics     []NetworkDevice
+	Disks    []StorageDevice
+	MemLock  bool
+	VhostNet bool
+
+	cmd   *exec.Cmd
+	files []*os.File
+	mon   *Monitor
+}
+
+func (vm *VirtualMachine) Monitor() *Monitor {
+	if vm.mon == nil {
+		panic("Monitor() call on uninitialized VM")
 	}
-	return list
-}
-
-func ConvertToUUID(ulid ulid.ULID) string {
-	buf := make([]byte, 36)
-
-	hex.Encode(buf[0:8], ulid[0:4])
-	buf[8] = '-'
-	hex.Encode(buf[9:13], ulid[4:6])
-	buf[13] = '-'
-	hex.Encode(buf[14:18], ulid[6:8])
-	buf[18] = '-'
-	hex.Encode(buf[19:23], ulid[8:10])
-	buf[23] = '-'
-	hex.Encode(buf[24:], ulid[10:])
-
-	return string(buf)
+	return vm.mon
 }

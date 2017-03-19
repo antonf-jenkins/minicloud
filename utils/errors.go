@@ -17,40 +17,6 @@
  */
 package utils
 
-import (
-	"crypto/rand"
-	"encoding/hex"
-	"github.com/oklog/ulid"
-)
+import "errors"
 
-func NewULID() ulid.ULID {
-	return ulid.MustNew(ulid.Now(), rand.Reader)
-}
-
-func RemoveULID(list []ulid.ULID, item ulid.ULID) []ulid.ULID {
-	for idx, elem := range list {
-		if elem == item {
-			listLen := len(list)
-			list[idx] = list[listLen-1]
-			list = list[:listLen-1]
-			return list
-		}
-	}
-	return list
-}
-
-func ConvertToUUID(ulid ulid.ULID) string {
-	buf := make([]byte, 36)
-
-	hex.Encode(buf[0:8], ulid[0:4])
-	buf[8] = '-'
-	hex.Encode(buf[9:13], ulid[4:6])
-	buf[13] = '-'
-	hex.Encode(buf[14:18], ulid[6:8])
-	buf[18] = '-'
-	hex.Encode(buf[19:23], ulid[8:10])
-	buf[23] = '-'
-	hex.Encode(buf[24:], ulid[10:])
-
-	return string(buf)
-}
+var ErrInterrupted = errors.New("Interrupted")
