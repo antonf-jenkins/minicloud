@@ -35,7 +35,7 @@ func setImageStateError(ctx context.Context, conn db.Connection, id ulid.ULID) e
 		return err
 	}
 	image.State = fsm.StateError
-	if err := conn.Images().Update(ctx, image); err != nil {
+	if err := conn.Images().Update(ctx, image, fsm.System); err != nil {
 		return err
 	}
 	return nil
@@ -57,7 +57,7 @@ func UploadImage(ctx context.Context, conn db.Connection, w http.ResponseWriter,
 	}
 
 	image.State = fsm.StateUploading
-	if err := conn.Images().Update(ctx, image); err != nil {
+	if err := conn.Images().Update(ctx, image, fsm.System); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -82,7 +82,7 @@ func UploadImage(ctx context.Context, conn db.Connection, w http.ResponseWriter,
 		}
 		image.State = fsm.StateReady
 		image.Checksum = fmt.Sprintf("%32x", md5hash.Sum(nil))
-		if err := conn.Images().Update(ctx, image); err != nil {
+		if err := conn.Images().Update(ctx, image, fsm.System); err != nil {
 			return err
 		}
 		return nil
