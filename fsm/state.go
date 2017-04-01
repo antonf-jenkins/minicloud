@@ -22,4 +22,6 @@ const (
 	StateCreated   State = "created"
 	StateUploading State = "uploading"
 	StateReady     State = "ready"
+	StateUpdated   State = "updated"
+	StateInUse     State = "in-use"
 )

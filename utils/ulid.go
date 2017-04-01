@@ -23,6 +23,8 @@ import (
 	"github.com/oklog/ulid"
 )
 
+var Zero = ulid.ULID{}
+
 func NewULID() ulid.ULID {
 	return ulid.MustNew(ulid.Now(), rand.Reader)
 }

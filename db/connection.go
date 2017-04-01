@@ -38,12 +38,14 @@ type Connection interface {
 
 	Projects() ProjectManager
 	Images() ImageManager
+	Disks() DiskManager
 }
 
 type etcdConeection struct {
 	client         *backend.Client
 	projectManager *etcdProjectManager
 	imageManager   *etcdImageManager
+	diskManager    *etcdDiskManager
 }
 
 func (c *etcdConeection) Projects() ProjectManager {
@@ -52,6 +54,10 @@ func (c *etcdConeection) Projects() ProjectManager {
 
 func (c *etcdConeection) Images() ImageManager {
 	return c.imageManager
+}
+
+func (c *etcdConeection) Disks() DiskManager {
+	return c.diskManager
 }
 
 func (db *etcdConeection) RawRead(ctx context.Context, key string) (*RawValue, error) {

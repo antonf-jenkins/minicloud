@@ -18,11 +18,17 @@
 package fsm
 
 type State string
+type Initiator int
+
+const (
+	System Initiator = 1 << 0
+	User   Initiator = 1 << 1
+)
 
 type StateMachine struct {
 	states      []State
 	initial     []State
-	transitions map[State]map[State]bool
+	transitions map[State]map[State]Initiator
 }
 
 func uniqueAppendState(states []State, state State) []State {
@@ -39,25 +45,37 @@ func (sm *StateMachine) AddState(state State) *StateMachine {
 	return sm
 }
 
-func (sm *StateMachine) AddInitialState(state State) *StateMachine {
+func (sm *StateMachine) InitialState(state State) *StateMachine {
 	sm.AddState(state)
 	sm.states = uniqueAppendState(sm.initial, state)
 	return sm
 }
 
-func (sm *StateMachine) AddTransition(from, to State) *StateMachine {
+func (sm *StateMachine) addTransition(from, to State, initiator Initiator) *StateMachine {
 	sm.AddState(from)
 	sm.AddState(to)
 	if sm.transitions == nil {
-		sm.transitions = make(map[State]map[State]bool)
+		sm.transitions = make(map[State]map[State]Initiator)
 	}
 	trans := sm.transitions[from]
 	if trans == nil {
-		trans = make(map[State]bool)
+		trans = make(map[State]Initiator)
 		sm.transitions[from] = trans
 	}
-	trans[to] = true
+	trans[to] = initiator
 	return sm
+}
+
+func (sm *StateMachine) Transition(from, to State) *StateMachine {
+	return sm.addTransition(from, to, System|User)
+}
+
+func (sm *StateMachine) SystemTransition(from, to State) *StateMachine {
+	return sm.addTransition(from, to, System)
+}
+
+func (sm *StateMachine) UserTransition(from, to State) *StateMachine {
+	return sm.addTransition(from, to, User)
 }
 
 func (sm *StateMachine) CheckState(state State) error {
@@ -78,24 +96,15 @@ func (sm *StateMachine) CheckInitialState(state State) error {
 	return &InvalidStateError{State: state}
 }
 
-func (sm *StateMachine) CheckTransition(from, to State) error {
+func (sm *StateMachine) CheckTransition(from, to State, initiator Initiator) error {
 	trans := sm.transitions[from]
-	if trans != nil {
-		if trans[to] {
-			return nil
-		}
+	if trans != nil && (trans[to]&initiator) != 0 {
+		return nil
 	}
 	return &InvalidTransitionError{From: from, To: to}
 }
 
-func NewStateMachine(transitions ...State) *StateMachine {
-	transLen := len(transitions)
-	if transLen%2 != 0 {
-		panic("Pairs of transitions should be passed to state machine!")
-	}
+func NewStateMachine() *StateMachine {
 	sm := &StateMachine{}
-	for i := 0; i < transLen; i += 2 {
-		sm.AddTransition(transitions[i], transitions[i+1])
-	}
 	return sm
 }

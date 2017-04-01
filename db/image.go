@@ -23,6 +23,7 @@ import (
 	"github.com/antonf/minicloud/fsm"
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
+	"reflect"
 	"regexp"
 )
 
@@ -30,7 +31,7 @@ type ImageManager interface {
 	NewEntity() *Image
 	Get(ctx context.Context, id ulid.ULID) (*Image, error)
 	Create(ctx context.Context, img *Image) error
-	Update(ctx context.Context, img *Image) error
+	Update(ctx context.Context, img *Image, initiator fsm.Initiator) error
 	Delete(ctx context.Context, id ulid.ULID) error
 	Watch(ctx context.Context) chan *Image
 }
@@ -42,19 +43,20 @@ type Image struct {
 	Name      string
 	State     fsm.State
 	Checksum  string
+	DiskIds   []ulid.ULID
 }
 
 var (
 	regexpImageName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")
-	imageFSM        = fsm.NewStateMachine(
-		fsm.StateCreated, fsm.StateCreated, // Allow update in created state
-		fsm.StateCreated, fsm.StateUploading,
-		fsm.StateUploading, fsm.StateReady,
-		fsm.StateReady, fsm.StateReady, // Allow update in ready state
-		fsm.StateCreated, fsm.StateError,
-		fsm.StateUploading, fsm.StateError,
-		fsm.StateReady, fsm.StateError,
-	).AddInitialState(fsm.StateCreated)
+	imageFSM        = fsm.NewStateMachine().
+			InitialState(fsm.StateCreated).
+			UserTransition(fsm.StateCreated, fsm.StateCreated). // Allow update in created state
+			UserTransition(fsm.StateReady, fsm.StateReady).     // Allow update in ready state
+			SystemTransition(fsm.StateCreated, fsm.StateUploading).
+			SystemTransition(fsm.StateUploading, fsm.StateReady).
+			SystemTransition(fsm.StateCreated, fsm.StateError).
+			SystemTransition(fsm.StateUploading, fsm.StateError).
+			SystemTransition(fsm.StateReady, fsm.StateError)
 )
 
 func (img *Image) String() string {
@@ -67,25 +69,39 @@ func (img *Image) validate() error {
 	if err := checkFieldRegexp("image", "Name", img.Name, regexpImageName); err != nil {
 		return err
 	}
+	if img.Checksum != "" {
+		return &FieldError{"image", "Checksum", "Field is read-only"}
+	}
 	if err := imageFSM.CheckInitialState(img.State); err != nil {
 		return err
+	}
+	if len(img.DiskIds) > 0 {
+		return &FieldError{"image", "DiskIds", "Should be empty"}
 	}
 	return nil
 }
 
-func (img *Image) validateUpdate() error {
-	origVal := img.original.(*Image)
-	if img.Id != origVal.Id {
+func (img *Image) validateUpdate(initiator fsm.Initiator) error {
+	origImg := img.original.(*Image)
+	if img.Id != origImg.Id {
 		return &FieldError{"image", "Id", "Field is read-only"}
 	}
-	if img.ProjectId != origVal.ProjectId {
+	if img.ProjectId != origImg.ProjectId {
 		return &FieldError{"image", "ProjectId", "Field is read-only"}
 	}
-	if err := imageFSM.CheckTransition(origVal.State, img.State); err != nil {
+	if err := imageFSM.CheckTransition(origImg.State, img.State, initiator); err != nil {
 		return err
 	}
 	if err := checkFieldRegexp("image", "Name", img.Name, regexpImageName); err != nil {
 		return err
+	}
+	if initiator != fsm.System {
+		if !reflect.DeepEqual(origImg.DiskIds, img.DiskIds) {
+			return &FieldError{"image", "DiskIds", "Field is read-only"}
+		}
+		if img.Checksum != origImg.Checksum {
+			return &FieldError{"image", "Checksum", "Field is read-only"}
+		}
 	}
 	return nil
 }
@@ -137,8 +153,8 @@ func (im *etcdImageManager) Create(ctx context.Context, img *Image) error {
 	return txn.Commit(ctx)
 }
 
-func (im *etcdImageManager) Update(ctx context.Context, img *Image) error {
-	if err := img.validateUpdate(); err != nil {
+func (im *etcdImageManager) Update(ctx context.Context, img *Image, initiator fsm.Initiator) error {
+	if err := img.validateUpdate(initiator); err != nil {
 		return err
 	}
 	c := im.conn
@@ -157,6 +173,10 @@ func (im *etcdImageManager) Delete(ctx context.Context, id ulid.ULID) error {
 	if err != nil {
 		return nil
 	}
+	if len(img.DiskIds) != 0 {
+		return &FieldError{"image", "DiskIds", "Can't delete image referenced by disk"}
+	}
+
 	c := im.conn
 	proj, err := c.Projects().Get(ctx, img.ProjectId)
 	if err != nil {

@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/antonf/minicloud/fsm"
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
 	"reflect"
@@ -33,7 +34,7 @@ type ProjectManager interface {
 	NewEntity() *Project
 	Get(ctx context.Context, id ulid.ULID) (*Project, error)
 	Create(ctx context.Context, proj *Project) error
-	Update(ctx context.Context, proj *Project) error
+	Update(ctx context.Context, proj *Project, initiator fsm.Initiator) error
 	Delete(ctx context.Context, id ulid.ULID) error
 	Watch(ctx context.Context) chan *Project
 }
@@ -43,6 +44,7 @@ type Project struct {
 	Id       ulid.ULID
 	Name     string
 	ImageIds []ulid.ULID
+	DiskIds  []ulid.ULID
 }
 
 func (p Project) String() string {
@@ -58,10 +60,13 @@ func (p *Project) validate() error {
 	if len(p.ImageIds) > 0 {
 		return &FieldError{"project", "ImageIds", "Should be empty"}
 	}
+	if len(p.DiskIds) > 0 {
+		return &FieldError{"project", "DiskIds", "Should be empty"}
+	}
 	return nil
 }
 
-func (p *Project) validateUpdate() error {
+func (p *Project) validateUpdate(initiator fsm.Initiator) error {
 	if err := checkFieldRegexp("project", "Name", p.Name, regexpProjectName); err != nil {
 		return err
 	}
@@ -69,8 +74,13 @@ func (p *Project) validateUpdate() error {
 	if p.Id != origVal.Id {
 		return &FieldError{"project", "Id", "Field is read-only"}
 	}
-	if !reflect.DeepEqual(origVal.ImageIds, p.ImageIds) {
-		return &FieldError{"project", "ImageIds", "Field is read-only"}
+	if initiator != fsm.System {
+		if !reflect.DeepEqual(origVal.ImageIds, p.ImageIds) {
+			return &FieldError{"project", "ImageIds", "Field is read-only"}
+		}
+		if !reflect.DeepEqual(origVal.DiskIds, p.DiskIds) {
+			return &FieldError{"project", "DiskIds", "Field is read-only"}
+		}
 	}
 	return nil
 }
@@ -113,8 +123,8 @@ func (pm *etcdProjectManager) Create(ctx context.Context, proj *Project) error {
 	return txn.Commit(ctx)
 }
 
-func (pm *etcdProjectManager) Update(ctx context.Context, proj *Project) error {
-	if err := proj.validateUpdate(); err != nil {
+func (pm *etcdProjectManager) Update(ctx context.Context, proj *Project, initiator fsm.Initiator) error {
+	if err := proj.validateUpdate(initiator); err != nil {
 		return err
 	}
 	c := pm.conn
@@ -135,6 +145,9 @@ func (pm *etcdProjectManager) Delete(ctx context.Context, id ulid.ULID) error {
 	}
 	if len(proj.ImageIds) != 0 {
 		return &FieldError{"project", "ImageIds", "Can't delete non-empty project"}
+	}
+	if len(proj.DiskIds) != 0 {
+		return &FieldError{"project", "DiskIds", "Can't delete non-empty project"}
 	}
 	c := pm.conn
 	txn := c.NewTransaction()
