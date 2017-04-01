@@ -26,8 +26,14 @@ import (
 var (
 	OptMonHost    = config.NewStringOpt("ceph_mon_host", "127.0.0.1")
 	OptKey        = config.NewStringOpt("ceph_key", "")
-	OptImageOrder = config.NewIntOpt("ceph_image_order", 22)
+	OptImageOrder = config.NewIntOpt("ceph_image_order", 18)
+	OptDiskOrder  = config.NewIntOpt("ceph_disk_order", 18)
 )
+
+type connection struct {
+	conn  *rados.Conn
+	ioctx *rados.IOContext
+}
 
 func setConfigOptions(conn *rados.Conn, options ...string) error {
 	optLen := len(options)
@@ -45,7 +51,7 @@ func setConfigOptions(conn *rados.Conn, options ...string) error {
 	return nil
 }
 
-func NewConnection() (*rados.Conn, error) {
+func NewConnection(pool string) (*connection, error) {
 	conn, err := rados.NewConn()
 	if err != nil {
 		log.Printf("ceph: new conn error: %s", err)
@@ -60,5 +66,24 @@ func NewConnection() (*rados.Conn, error) {
 	if err := conn.Connect(); err != nil {
 		return nil, err
 	}
-	return conn, nil
+
+	ioctx, err := conn.OpenIOContext(pool)
+	if err != nil {
+		log.Printf("ceph: open ioctx pool=%s: %s", pool, err)
+		conn.Shutdown()
+		return nil, err
+	}
+
+	return &connection{conn, ioctx}, nil
+}
+
+func (c *connection) Close() {
+	if c.ioctx != nil {
+		c.ioctx.Destroy()
+		c.ioctx = nil
+	}
+	if c.conn != nil {
+		c.conn.Shutdown()
+		c.conn = nil
+	}
 }

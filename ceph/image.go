@@ -25,23 +25,15 @@ import (
 
 func CreateImageWithContent(pool, name string, size uint64, reader io.Reader) error {
 	// Create connection; defer shutdown
-	conn, err := NewConnection()
+	conn, err := NewConnection(pool)
 	if err != nil {
 		log.Printf("ceph: new connection failed: %s", err)
 		return err
 	}
-	defer conn.Shutdown()
-
-	// Create IO context; defer IO context destroy
-	ioctx, err := conn.OpenIOContext(pool)
-	if err != nil {
-		log.Printf("ceph: open ioctx pool=%s: %s", pool, err)
-		return err
-	}
-	defer ioctx.Destroy()
+	defer conn.Close()
 
 	// Create and write the image
-	img, err := rbd.Create(ioctx, name, size, OptImageOrder.Value())
+	img, err := rbd.Create(conn.ioctx, name, size, OptImageOrder.Value())
 	if err != nil {
 		log.Printf("ceph: create image pool=%s name=%s: %s", pool, name, err)
 		return err
@@ -99,17 +91,9 @@ func DeleteImage(pool, name string) error {
 		log.Printf("ceph: new connection failed: %s", err)
 		return err
 	}
-	defer conn.Shutdown()
+	defer conn.Close()
 
-	// Create IO context; defer IO context destroy
-	ioctx, err := conn.OpenIOContext(pool)
-	if err != nil {
-		log.Printf("ceph: open ioctx pool=%s: %s", pool, err)
-		return err
-	}
-	defer ioctx.Destroy()
-
-	img := rbd.GetImage(ioctx, name)
+	img := rbd.GetImage(conn.ioctx, name)
 	snapNames, err := img.GetSnapshotNames()
 	if err != nil {
 		return err
