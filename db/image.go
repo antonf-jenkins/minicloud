@@ -32,6 +32,7 @@ type ImageManager interface {
 	Create(ctx context.Context, img *Image) error
 	Update(ctx context.Context, img *Image) error
 	Delete(ctx context.Context, id ulid.ULID) error
+	Watch(ctx context.Context) chan *Image
 }
 
 type Image struct {
@@ -168,4 +169,25 @@ func (im *etcdImageManager) Delete(ctx context.Context, id ulid.ULID) error {
 	txn.Delete(img)
 	txn.Update(proj)
 	return txn.Commit(ctx)
+}
+
+func (im *etcdImageManager) Watch(ctx context.Context) chan *Image {
+	entityCh := im.conn.watchEntity(ctx, func() Entity { return im.NewEntity() })
+	resultCh := make(chan *Image)
+	go func() {
+	loop:
+		for {
+			select {
+			case entity := <-entityCh:
+				if entity == nil {
+					break loop
+				}
+				resultCh <- entity.(*Image)
+			case <-ctx.Done():
+				break loop
+			}
+		}
+		close(resultCh)
+	}()
+	return resultCh
 }

@@ -117,3 +117,36 @@ func (db *etcdConeection) loadEntity(ctx context.Context, entity Entity) error {
 	entity.setOriginal(utils.MakeStructCopy(entity).(Entity))
 	return nil
 }
+
+func (db *etcdConeection) watchEntity(ctx context.Context, newEntity func() Entity) chan Entity {
+	entityName := GetEntityName(newEntity())
+	prefix := fmt.Sprintf("%s/%s/", DataPrefix, entityName)
+	log.Printf("db: watching entity=%s prefix=%s", entityName, prefix)
+	rawCh := db.RawWatchPrefix(ctx, prefix)
+	resultCh := make(chan Entity)
+	go func() {
+	loop:
+		for {
+			select {
+			case rawVal := <-rawCh:
+				if rawVal == nil {
+					break loop
+				}
+				entity := newEntity()
+				if err := json.Unmarshal(rawVal.Data, entity); err != nil {
+					log.Printf("db: watch: unmarshal failed data='%s': %s", string(rawVal.Data), err)
+					continue
+				}
+				entity.setCreateRev(rawVal.CreateRev)
+				entity.setModifyRev(rawVal.ModifyRev)
+				entity.setOriginal(utils.MakeStructCopy(entity).(Entity))
+				resultCh <- entity
+			case <-ctx.Done():
+				break loop
+			}
+		}
+		log.Printf("db: stopped watching entity=%s prefix=%s", entityName, prefix)
+		close(resultCh)
+	}()
+	return resultCh
+}

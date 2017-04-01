@@ -19,6 +19,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
@@ -34,6 +35,7 @@ type ProjectManager interface {
 	Create(ctx context.Context, proj *Project) error
 	Update(ctx context.Context, proj *Project) error
 	Delete(ctx context.Context, id ulid.ULID) error
+	Watch(ctx context.Context) chan *Project
 }
 
 type Project struct {
@@ -139,4 +141,25 @@ func (pm *etcdProjectManager) Delete(ctx context.Context, id ulid.ULID) error {
 	proj.forfeitUniqueName(txn)
 	txn.Delete(proj)
 	return txn.Commit(ctx)
+}
+
+func (pm *etcdProjectManager) Watch(ctx context.Context) chan *Project {
+	entityCh := pm.conn.watchEntity(ctx, func() Entity { return pm.NewEntity() })
+	resultCh := make(chan *Project)
+	go func() {
+	loop:
+		for {
+			select {
+			case entity := <-entityCh:
+				if entity == nil {
+					break loop
+				}
+				resultCh <- entity.(*Project)
+			case <-ctx.Done():
+				break loop
+			}
+		}
+		close(resultCh)
+	}()
+	return resultCh
 }

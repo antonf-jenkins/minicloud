@@ -169,8 +169,7 @@ func init() {
 }
 
 func InitOptions(ctx context.Context, conn db.Connection) {
-	rawValCh := make(chan *db.RawValue)
-	conn.RawWatchPrefix(ctx, GlobalConfigPrefix, rawValCh)
+	rawValCh := conn.RawWatchPrefix(ctx, GlobalConfigPrefix)
 	for _, opt := range options {
 		initializeOpt(ctx, opt, conn)
 	}

@@ -34,7 +34,7 @@ type RawValue struct {
 
 type Connection interface {
 	RawRead(ctx context.Context, key string) (*RawValue, error)
-	RawWatchPrefix(ctx context.Context, prefix string, resultCh chan *RawValue)
+	RawWatchPrefix(ctx context.Context, prefix string) chan *RawValue
 
 	Projects() ProjectManager
 	Images() ImageManager
@@ -71,14 +71,16 @@ func (db *etcdConeection) RawRead(ctx context.Context, key string) (*RawValue, e
 	return result, nil
 }
 
-func (db *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string, resultCh chan *RawValue) {
+func (db *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string) chan *RawValue {
 	respCh := db.client.Watch(ctx, prefix, backend.WithPrefix())
+	resultCh := make(chan *RawValue)
 	go func() {
 		log.Printf("db: raw: watching prefix %s", prefix)
 		for {
 			select {
 			case <-ctx.Done():
 				log.Printf("db: raw: stopped watching prefix %s", prefix)
+				close(resultCh)
 				return
 			case eventBatch := <-respCh:
 				for _, ev := range eventBatch.Events {
@@ -93,6 +95,7 @@ func (db *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string, res
 			}
 		}
 	}()
+	return resultCh
 }
 
 func NewConnection() Connection {
