@@ -36,7 +36,8 @@ var DiskFSM = NewStateMachine().
 	SystemTransition(db.StateReady, db.StateError).
 	SystemTransition(db.StateUpdated, db.StateError).
 	SystemTransition(db.StateInUse, db.StateError).
-	Hook(db.StateCreated, HandleDiskCreated)
+	Hook(db.StateCreated, HandleDiskCreated).
+	Hook(db.StateUpdated, HandleDiskUpdated)
 
 func HandleDiskCreated(ctx context.Context, conn db.Connection, entity db.Entity) {
 	disk := entity.(*db.Disk)
@@ -53,6 +54,19 @@ func HandleDiskCreated(ctx context.Context, conn db.Connection, entity db.Entity
 		disk.State = db.StateReady
 	}
 	if err = conn.Disks().Update(ctx, disk, db.InitiatorSystem); err != nil {
+		log.Printf("fsm: failed to change disk state state=%s id=%s: %s", disk.State, disk.Id, err)
+	}
+}
+
+func HandleDiskUpdated(ctx context.Context, conn db.Connection, entity db.Entity) {
+	disk := entity.(*db.Disk)
+	if err := ceph.ResizeDisk(disk.Pool, disk.Id.String(), disk.Size); err != nil {
+		disk.State = db.StateError
+		log.Printf("fsm: failed to create disk id=%s: %s", disk.Id, err)
+	} else {
+		disk.State = db.StateReady
+	}
+	if err := conn.Disks().Update(ctx, disk, db.InitiatorSystem); err != nil {
 		log.Printf("fsm: failed to change disk state state=%s id=%s: %s", disk.State, disk.Id, err)
 	}
 }

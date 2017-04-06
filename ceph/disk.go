@@ -75,3 +75,37 @@ func CreateDiskFromImage(diskPool, diskName, imagePool, imageName, snap string, 
 
 	return nil
 }
+
+func ResizeDisk(pool, name string, size uint64) error {
+	// Create connection; defer shutdown
+	conn, err := NewConnection(pool)
+	if err != nil {
+		log.Printf("ceph: new connection failed: %s", err)
+		return err
+	}
+	defer conn.Close()
+
+	// Open disk
+	disk := rbd.GetImage(conn.ioctx[pool], name)
+	if err := disk.Open(); err != nil {
+		log.Printf("ceph: open disk error pool=%s name=%s: %s", pool, name, err)
+		return err
+	}
+	defer disk.Close()
+
+	// Check old size
+	if oldSize, err := disk.GetSize(); err != nil {
+		log.Printf("ceph: get disk size error pool=%s name=%s: %s", pool, name, err)
+		return err
+	} else if oldSize == size {
+		return nil
+	}
+
+	// Resize disk
+	if err := disk.Resize(size); err != nil {
+		log.Printf("ceph: failed to resize disk pool=%s name=%s : %s", pool, name, err)
+		return err
+	}
+
+	return nil
+}
