@@ -15,12 +15,13 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package db
+package dbimpl
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/antonf/minicloud/db"
 	"github.com/antonf/minicloud/utils"
 	backend "github.com/coreos/etcd/clientv3"
 	"github.com/oklog/ulid"
@@ -28,17 +29,7 @@ import (
 	"strings"
 )
 
-type Transaction interface {
-	Commit(ctx context.Context) error
-	Create(entity Entity)
-	Update(entity Entity)
-	Delete(entity Entity)
-	ForceDelete(entity string, id ulid.ULID)
-	ClaimUnique(entity Entity, spec ...string)
-	ForfeitUnique(entity Entity, spec ...string)
-}
-
-func (c *etcdConeection) NewTransaction() Transaction {
+func (c *etcdConeection) NewTransaction() db.Transaction {
 	return &etcdTransaction{
 		xid:  utils.NewULID().String(),
 		conn: c,
@@ -73,12 +64,12 @@ func (t *etcdTransaction) Commit(ctx context.Context) error {
 		return err
 	}
 	if !resp.Succeeded {
-		return &ConflictError{t.xid}
+		return &db.ConflictError{t.xid}
 	}
 	return nil
 }
 
-func (t *etcdTransaction) Create(entity Entity) {
+func (t *etcdTransaction) Create(entity db.Entity) {
 	if t.err != nil {
 		return
 	}
@@ -94,7 +85,7 @@ func (t *etcdTransaction) Create(entity Entity) {
 	t.addOp(backend.OpPut(key, string(marshaledEntity)))
 }
 
-func (t *etcdTransaction) Update(entity Entity) {
+func (t *etcdTransaction) Update(entity db.Entity) {
 	if t.err != nil {
 		return
 	}
@@ -107,17 +98,17 @@ func (t *etcdTransaction) Update(entity Entity) {
 	}
 	key := dataKey(entity)
 	t.addCmp(backend.Version(key), "!=", 0)
-	t.addCmp(backend.ModRevision(key), "=", entity.modifyRev())
+	t.addCmp(backend.ModRevision(key), "=", entity.Header().ModifyRev)
 	t.addOp(backend.OpPut(key, string(marshaledEntity)))
 }
 
-func (t *etcdTransaction) Delete(entity Entity) {
+func (t *etcdTransaction) Delete(entity db.Entity) {
 	if t.err != nil {
 		return
 	}
 	log.Printf("db: txn %s: deleting entity=%s", t.xid, entity)
 	key := dataKey(entity)
-	t.addCmp(backend.ModRevision(key), "=", entity.modifyRev())
+	t.addCmp(backend.ModRevision(key), "=", entity.Header().ModifyRev)
 	t.addOp(backend.OpDelete(key))
 }
 
@@ -134,26 +125,46 @@ func metaKey(name string, spec []string) string {
 	return fmt.Sprintf("%s/%s/%s", MetaPrefix, name, strings.Join(spec, "/"))
 }
 
-func (t *etcdTransaction) ClaimUnique(entity Entity, spec ...string) {
+func (t *etcdTransaction) ClaimUnique(entity db.Entity, spec ...string) {
 	if t.err != nil {
 		return
 	}
 	entityName := GetEntityName(entity)
 	key := metaKey(entityName, spec)
 	log.Printf("db: txn %s: claim unique entity=%s key=%s", t.xid, entityName, key)
-	entityId := GetEntityId(entity).String()
+	entityId := entity.Header().Id.String()
 	t.addCmp(backend.Version(key), "=", 0)
 	t.addOp(backend.OpPut(key, entityId))
 }
 
-func (t *etcdTransaction) ForfeitUnique(entity Entity, spec ...string) {
+func (t *etcdTransaction) ForfeitUnique(entity db.Entity, spec ...string) {
 	if t.err != nil {
 		return
 	}
 	entityName := GetEntityName(entity)
 	key := metaKey(entityName, spec)
 	log.Printf("db: txn %s: forfeit unique entity=%s key=%s", t.xid, entityName, key)
-	entityId := GetEntityId(entity).String()
+	entityId := entity.Header().Id.String()
 	t.addCmp(backend.Value(key), "=", entityId)
+	t.addOp(backend.OpDelete(key))
+}
+
+func (t *etcdTransaction) CreateMeta(path []string, content string) {
+	if t.err != nil {
+		return
+	}
+	key := MetaPrefix + "/" + strings.Join(path, "/")
+	log.Printf("db: txn %s: create meta %s: %s", t.xid, key, content)
+	t.addCmp(backend.Version(key), "=", 0)
+	t.addOp(backend.OpPut(key, content))
+}
+
+func (t *etcdTransaction) DeleteMeta(path []string, content string) {
+	if t.err != nil {
+		return
+	}
+	key := MetaPrefix + "/" + strings.Join(path, "/")
+	log.Printf("db: txn %s: delete meta %s: %s", t.xid, key, content)
+	t.addCmp(backend.Value(key), "=", content)
 	t.addOp(backend.OpDelete(key))
 }

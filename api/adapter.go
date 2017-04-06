@@ -20,7 +20,7 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"github.com/antonf/minicloud/fsm"
+	"github.com/antonf/minicloud/db"
 	"github.com/oklog/ulid"
 	"net/http"
 	"reflect"
@@ -55,7 +55,7 @@ func (mh *managerHandlers) create(ctx context.Context, entity reflect.Value) err
 }
 
 func (mh *managerHandlers) update(ctx context.Context, entity reflect.Value) error {
-	result := mh.putRv.Call([]reflect.Value{reflect.ValueOf(ctx), entity, reflect.ValueOf(fsm.User)})
+	result := mh.putRv.Call([]reflect.Value{reflect.ValueOf(ctx), entity, reflect.ValueOf(db.InitiatorUser)})
 	return toError(result[0])
 }
 

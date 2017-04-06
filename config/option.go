@@ -166,6 +166,7 @@ func getOption(rawValue *db.RawValue) option {
 
 func init() {
 	options = make(map[string]option)
+	initCommonOptions()
 }
 
 func InitOptions(ctx context.Context, conn db.Connection) {

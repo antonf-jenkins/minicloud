@@ -32,7 +32,7 @@ var (
 
 type connection struct {
 	conn  *rados.Conn
-	ioctx *rados.IOContext
+	ioctx map[string]*rados.IOContext
 }
 
 func setConfigOptions(conn *rados.Conn, options ...string) error {
@@ -51,7 +51,7 @@ func setConfigOptions(conn *rados.Conn, options ...string) error {
 	return nil
 }
 
-func NewConnection(pool string) (*connection, error) {
+func NewConnection(pools ...string) (*connection, error) {
 	conn, err := rados.NewConn()
 	if err != nil {
 		log.Printf("ceph: new conn error: %s", err)
@@ -67,19 +67,25 @@ func NewConnection(pool string) (*connection, error) {
 		return nil, err
 	}
 
-	ioctx, err := conn.OpenIOContext(pool)
-	if err != nil {
-		log.Printf("ceph: open ioctx pool=%s: %s", pool, err)
-		conn.Shutdown()
-		return nil, err
+	result := connection{conn, make(map[string]*rados.IOContext)}
+	for _, pool := range pools {
+		if ioctx, err := conn.OpenIOContext(pool); err != nil {
+			log.Printf("ceph: open ioctx pool=%s: %s", pool, err)
+			result.Close()
+			return nil, err
+		} else {
+			result.ioctx[pool] = ioctx
+		}
 	}
 
-	return &connection{conn, ioctx}, nil
+	return &result, nil
 }
 
 func (c *connection) Close() {
 	if c.ioctx != nil {
-		c.ioctx.Destroy()
+		for _, ioctx := range c.ioctx {
+			ioctx.Destroy()
+		}
 		c.ioctx = nil
 	}
 	if c.conn != nil {

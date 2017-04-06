@@ -15,31 +15,17 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package db
+package dbimpl
 
 import (
 	"context"
+	"github.com/antonf/minicloud/db"
 	"github.com/antonf/minicloud/env"
 	backend "github.com/coreos/etcd/clientv3"
 	"log"
 	"strings"
 	"time"
 )
-
-type RawValue struct {
-	CreateRev, ModifyRev int64
-	Key                  string
-	Data                 []byte
-}
-
-type Connection interface {
-	RawRead(ctx context.Context, key string) (*RawValue, error)
-	RawWatchPrefix(ctx context.Context, prefix string) chan *RawValue
-
-	Projects() ProjectManager
-	Images() ImageManager
-	Disks() DiskManager
-}
 
 type etcdConeection struct {
 	client         *backend.Client
@@ -48,24 +34,24 @@ type etcdConeection struct {
 	diskManager    *etcdDiskManager
 }
 
-func (c *etcdConeection) Projects() ProjectManager {
+func (c *etcdConeection) Projects() db.ProjectManager {
 	return c.projectManager
 }
 
-func (c *etcdConeection) Images() ImageManager {
+func (c *etcdConeection) Images() db.ImageManager {
 	return c.imageManager
 }
 
-func (c *etcdConeection) Disks() DiskManager {
+func (c *etcdConeection) Disks() db.DiskManager {
 	return c.diskManager
 }
 
-func (db *etcdConeection) RawRead(ctx context.Context, key string) (*RawValue, error) {
-	resp, err := db.client.Get(ctx, key, backend.WithSerializable())
+func (c *etcdConeection) RawRead(ctx context.Context, key string) (*db.RawValue, error) {
+	resp, err := c.client.Get(ctx, key, backend.WithSerializable())
 	if err != nil {
 		return nil, err
 	}
-	result := &RawValue{}
+	result := &db.RawValue{}
 	if resp.Count == 0 {
 		result.ModifyRev = resp.Header.Revision
 	} else {
@@ -77,9 +63,24 @@ func (db *etcdConeection) RawRead(ctx context.Context, key string) (*RawValue, e
 	return result, nil
 }
 
-func (db *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string) chan *RawValue {
-	respCh := db.client.Watch(ctx, prefix, backend.WithPrefix())
-	resultCh := make(chan *RawValue)
+func (c *etcdConeection) RawReadPrefix(ctx context.Context, key string) ([]db.RawValue, error) {
+	resp, err := c.client.Get(ctx, key, backend.WithSerializable(), backend.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+	result := make([]db.RawValue, resp.Count)
+	for i, kv := range resp.Kvs {
+		result[i].CreateRev = kv.CreateRevision
+		result[i].ModifyRev = kv.ModRevision
+		result[i].Key = string(kv.Key)
+		result[i].Data = kv.Value
+	}
+	return result, nil
+}
+
+func (c *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string) chan *db.RawValue {
+	respCh := c.client.Watch(ctx, prefix, backend.WithPrefix())
+	resultCh := make(chan *db.RawValue)
 	go func() {
 		log.Printf("db: raw: watching prefix %s", prefix)
 		for {
@@ -96,7 +97,7 @@ func (db *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string) cha
 					if ev.Type == backend.EventTypePut {
 						value = kv.Value
 					}
-					resultCh <- &RawValue{kv.CreateRevision, kv.ModRevision, key, value}
+					resultCh <- &db.RawValue{kv.CreateRevision, kv.ModRevision, key, value}
 				}
 			}
 		}
@@ -104,7 +105,7 @@ func (db *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string) cha
 	return resultCh
 }
 
-func NewConnection() Connection {
+func NewConnection() db.Connection {
 	log.Printf("db: init: connecting to %s, timeout %dms...", env.EtcdEndpoints, env.EtcdDialTimeout)
 	cli, err := backend.New(backend.Config{
 		Endpoints:   strings.Split(env.EtcdEndpoints, ","),
@@ -118,5 +119,6 @@ func NewConnection() Connection {
 	conn := &etcdConeection{client: cli}
 	conn.projectManager = &etcdProjectManager{conn}
 	conn.imageManager = &etcdImageManager{conn}
+	conn.diskManager = &etcdDiskManager{conn}
 	return conn
 }

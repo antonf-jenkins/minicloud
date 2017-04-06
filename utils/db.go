@@ -15,13 +15,25 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package fsm
+package utils
 
-const (
-	StateError     State = "error"
-	StateCreated   State = "created"
-	StateUploading State = "uploading"
-	StateReady     State = "ready"
-	StateUpdated   State = "updated"
-	StateInUse     State = "in-use"
+import (
+	"github.com/antonf/minicloud/config"
+	"github.com/antonf/minicloud/db"
+	"log"
 )
+
+func Retry(operationFn func() error) (err error) {
+	retryCount := config.OptRetryCount.Value()
+	for i := 0; i < retryCount; i++ {
+		if err = operationFn(); err != nil {
+			if _, ok := err.(*db.ConflictError); ok {
+				log.Printf("operation failed attempt=%s: %s", i, err)
+				continue
+			}
+		} else {
+			return
+		}
+	}
+	return
+}

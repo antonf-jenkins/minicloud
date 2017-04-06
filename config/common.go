@@ -15,35 +15,12 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package db
+package config
 
-import (
-	"fmt"
-	"github.com/oklog/ulid"
-	"strings"
+var (
+	OptRetryCount IntOpt
 )
 
-type FieldError struct {
-	Entity, Field, Message string
-}
-
-func (e *FieldError) Error() string {
-	return fmt.Sprintf("%s.%s invalid: %s", e.Entity, e.Field, e.Message)
-}
-
-type ConflictError struct {
-	Xid string
-}
-
-func (e *ConflictError) Error() string {
-	return fmt.Sprintf("Conflict committing transaction %s", e.Xid)
-}
-
-type NotFoundError struct {
-	Entity string
-	Id     ulid.ULID
-}
-
-func (e *NotFoundError) Error() string {
-	return fmt.Sprintf("%s with id %s not found", strings.Title(e.Entity), e.Id)
+func initCommonOptions() {
+	OptRetryCount = NewIntOpt("retry_count", 5)
 }

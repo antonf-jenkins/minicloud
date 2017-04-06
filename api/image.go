@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"github.com/antonf/minicloud/ceph"
 	"github.com/antonf/minicloud/db"
-	"github.com/antonf/minicloud/fsm"
+	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
 	"io"
 	"net/http"
@@ -34,8 +34,8 @@ func setImageStateError(ctx context.Context, conn db.Connection, id ulid.ULID) e
 	if err != nil {
 		return err
 	}
-	image.State = fsm.StateError
-	if err := conn.Images().Update(ctx, image, fsm.System); err != nil {
+	image.State = db.StateError
+	if err := conn.Images().Update(ctx, image, db.InitiatorSystem); err != nil {
 		return err
 	}
 	return nil
@@ -56,8 +56,8 @@ func UploadImage(ctx context.Context, conn db.Connection, w http.ResponseWriter,
 		return
 	}
 
-	image.State = fsm.StateUploading
-	if err := conn.Images().Update(ctx, image, fsm.System); err != nil {
+	image.State = db.StateUploading
+	if err := conn.Images().Update(ctx, image, db.InitiatorSystem); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -67,7 +67,7 @@ func UploadImage(ctx context.Context, conn db.Connection, w http.ResponseWriter,
 	content := io.TeeReader(req.Body, md5hash)
 	contentLength := uint64(req.ContentLength)
 	if err := ceph.CreateImageWithContent("images", image.Id.String(), contentLength, content); err != nil {
-		retry(func() error {
+		utils.Retry(func() error {
 			return setImageStateError(ctx, conn, id)
 		})
 		writeError(w, err)
@@ -75,19 +75,19 @@ func UploadImage(ctx context.Context, conn db.Connection, w http.ResponseWriter,
 	}
 
 	// Update image state
-	if err := retry(func() error {
+	if err := utils.Retry(func() error {
 		image, err := conn.Images().Get(ctx, id)
 		if err != nil {
 			return err
 		}
-		image.State = fsm.StateReady
+		image.State = db.StateReady
 		image.Checksum = fmt.Sprintf("%32x", md5hash.Sum(nil))
-		if err := conn.Images().Update(ctx, image, fsm.System); err != nil {
+		if err := conn.Images().Update(ctx, image, db.InitiatorSystem); err != nil {
 			return err
 		}
 		return nil
 	}); err != nil {
-		retry(func() error {
+		utils.Retry(func() error {
 			return setImageStateError(ctx, conn, id)
 		})
 		writeError(w, err)

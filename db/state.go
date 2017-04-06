@@ -17,33 +17,12 @@
  */
 package db
 
-import (
-	"fmt"
-	"github.com/oklog/ulid"
-	"strings"
+const (
+	StateNone      State = ""
+	StateError     State = "error"
+	StateCreated   State = "created"
+	StateUploading State = "uploading"
+	StateReady     State = "ready"
+	StateUpdated   State = "updated"
+	StateInUse     State = "in-use"
 )
-
-type FieldError struct {
-	Entity, Field, Message string
-}
-
-func (e *FieldError) Error() string {
-	return fmt.Sprintf("%s.%s invalid: %s", e.Entity, e.Field, e.Message)
-}
-
-type ConflictError struct {
-	Xid string
-}
-
-func (e *ConflictError) Error() string {
-	return fmt.Sprintf("Conflict committing transaction %s", e.Xid)
-}
-
-type NotFoundError struct {
-	Entity string
-	Id     ulid.ULID
-}
-
-func (e *NotFoundError) Error() string {
-	return fmt.Sprintf("%s with id %s not found", strings.Title(e.Entity), e.Id)
-}

@@ -15,35 +15,21 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package db
+package ceph
 
-import (
-	"fmt"
-	"github.com/oklog/ulid"
-	"strings"
+const (
+	RbdFeatureLayering      = 1 << 0
+	RbdFeatureStripingV2    = 1 << 1
+	RbdFeatureExclusiveLock = 1 << 2
+	RbdFeatureObjectMap     = 1 << 3
+	RbdFeatureFastDiff      = 1 << 4
+	RbdFeatureDeepFlatten   = 1 << 5
+	RbdFeatureJournaling    = 1 << 6
+	RbdFeatureDataPool      = 1 << 7
+
+	RbdFeaturesDefault = RbdFeatureLayering |
+		RbdFeatureExclusiveLock |
+		RbdFeatureObjectMap |
+		RbdFeatureFastDiff |
+		RbdFeatureDeepFlatten
 )
-
-type FieldError struct {
-	Entity, Field, Message string
-}
-
-func (e *FieldError) Error() string {
-	return fmt.Sprintf("%s.%s invalid: %s", e.Entity, e.Field, e.Message)
-}
-
-type ConflictError struct {
-	Xid string
-}
-
-func (e *ConflictError) Error() string {
-	return fmt.Sprintf("Conflict committing transaction %s", e.Xid)
-}
-
-type NotFoundError struct {
-	Entity string
-	Id     ulid.ULID
-}
-
-func (e *NotFoundError) Error() string {
-	return fmt.Sprintf("%s with id %s not found", strings.Title(e.Entity), e.Id)
-}

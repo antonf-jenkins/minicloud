@@ -33,7 +33,7 @@ func CreateImageWithContent(pool, name string, size uint64, reader io.Reader) er
 	defer conn.Close()
 
 	// Create and write the image
-	img, err := rbd.Create(conn.ioctx, name, size, OptImageOrder.Value())
+	img, err := rbd.Create(conn.ioctx[pool], name, size, OptImageOrder.Value())
 	if err != nil {
 		log.Printf("ceph: create image pool=%s name=%s: %s", pool, name, err)
 		return err
@@ -93,7 +93,7 @@ func DeleteImage(pool, name string) error {
 	}
 	defer conn.Close()
 
-	img := rbd.GetImage(conn.ioctx, name)
+	img := rbd.GetImage(conn.ioctx[pool], name)
 	snapNames, err := img.GetSnapshotNames()
 	if err != nil {
 		return err

@@ -17,10 +17,13 @@
  */
 package fsm
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/antonf/minicloud/db"
+)
 
 type InvalidStateError struct {
-	State State
+	State db.State
 }
 
 func (e *InvalidStateError) Error() string {
@@ -28,8 +31,8 @@ func (e *InvalidStateError) Error() string {
 }
 
 type InvalidTransitionError struct {
-	From State
-	To   State
+	From db.State
+	To   db.State
 }
 
 func (e *InvalidTransitionError) Error() string {
