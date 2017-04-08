@@ -68,10 +68,11 @@ func formatMessage(msg *Message) {
 	buf := bufPool.Get().(*bytes.Buffer)
 	level := msg.Level.String()
 	buf.WriteString(level)
-	for i := 0; i < 8-len(level); i++ {
+	buf.WriteByte(' ')
+	for i := 0; i < MaxLevelStringLen-len(level); i++ {
 		buf.WriteByte(' ')
 	}
-	buf.WriteString(msg.Time.Format("2006-01-02 15:04:05.999"))
+	buf.WriteString(msg.Time.Format("2006-01-02 15:04:05.000"))
 	buf.WriteByte(' ')
 	buf.WriteString(msg.Logger)
 	buf.WriteString(": ")

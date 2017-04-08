@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/antonf/minicloud/utils"
-	"log"
 	"os"
 	"os/exec"
 	"path"
@@ -163,7 +162,7 @@ func (vm *VirtualMachine) Start(ctx context.Context) error {
 	vm.closeFiles()
 	if mon, err := NewMonitor(ctx, path.Join(vm.Root, "mon.sock")); err != nil {
 		if killErr := vm.cmd.Process.Kill(); killErr != nil {
-			log.Printf("qemu: failed to kill VM process %d: %s", vm.cmd.Process.Pid, killErr)
+			logger.Error(ctx, "failed to kill process", "pid", vm.cmd.Process.Pid, "error", killErr)
 		}
 		return err
 	} else {

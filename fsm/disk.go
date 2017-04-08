@@ -22,7 +22,6 @@ import (
 	"github.com/antonf/minicloud/ceph"
 	"github.com/antonf/minicloud/db"
 	"github.com/antonf/minicloud/utils"
-	"log"
 )
 
 var DiskFSM = NewStateMachine().
@@ -43,30 +42,30 @@ func HandleDiskCreated(ctx context.Context, conn db.Connection, entity db.Entity
 	disk := entity.(*db.Disk)
 	var err error
 	if disk.ImageId != utils.Zero {
-		err = ceph.CreateDiskFromImage(disk.Pool, disk.Id.String(), "images", disk.ImageId.String(), "base", disk.Size)
+		err = ceph.CreateDiskFromImage(ctx, disk.Pool, disk.Id.String(), "images", disk.ImageId.String(), "base", disk.Size)
 	} else {
-		err = ceph.CreateEmptyDisk(disk.Pool, disk.Id.String(), disk.Size)
+		err = ceph.CreateEmptyDisk(ctx, disk.Pool, disk.Id.String(), disk.Size)
 	}
 	if err != nil {
+		logger.Debug(ctx, "setting disk state to error", "id", disk.Id, "cause", err)
 		disk.State = db.StateError
-		log.Printf("fsm: failed to create disk id=%s: %s", disk.Id, err)
 	} else {
 		disk.State = db.StateReady
 	}
 	if err = conn.Disks().Update(ctx, disk, db.InitiatorSystem); err != nil {
-		log.Printf("fsm: failed to change disk state state=%s id=%s: %s", disk.State, disk.Id, err)
+		logger.Error(ctx, "failed to change disk state state", "id", disk.Id, "state", disk.State, "error", err)
 	}
 }
 
 func HandleDiskUpdated(ctx context.Context, conn db.Connection, entity db.Entity) {
 	disk := entity.(*db.Disk)
-	if err := ceph.ResizeDisk(disk.Pool, disk.Id.String(), disk.Size); err != nil {
+	if err := ceph.ResizeDisk(ctx, disk.Pool, disk.Id.String(), disk.Size); err != nil {
+		logger.Debug(ctx, "setting disk state to error", "id", disk.Id, "cause", err)
 		disk.State = db.StateError
-		log.Printf("fsm: failed to create disk id=%s: %s", disk.Id, err)
 	} else {
 		disk.State = db.StateReady
 	}
 	if err := conn.Disks().Update(ctx, disk, db.InitiatorSystem); err != nil {
-		log.Printf("fsm: failed to change disk state state=%s id=%s: %s", disk.State, disk.Id, err)
+		logger.Error(ctx, "failed to change disk state state", "id", disk.Id, "state", disk.State, "error", err)
 	}
 }

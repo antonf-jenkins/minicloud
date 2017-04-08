@@ -50,14 +50,15 @@ type Connection interface {
 
 type Transaction interface {
 	Commit(ctx context.Context) error
-	Create(entity Entity)
-	Update(entity Entity)
-	Delete(entity Entity)
-	ForceDelete(entity string, id ulid.ULID)
-	ClaimUnique(entity Entity, spec ...string)
-	ForfeitUnique(entity Entity, spec ...string)
-	CreateMeta(path []string, content string)
-	DeleteMeta(path []string, content string)
+	Create(ctx context.Context, entity Entity)
+	Update(ctx context.Context, entity Entity)
+	Delete(ctx context.Context, entity Entity)
+	ForceDelete(ctx context.Context, entity string, id ulid.ULID)
+	ClaimUnique(ctx context.Context, entity Entity, spec ...string)
+	ForfeitUnique(ctx context.Context, entity Entity, spec ...string)
+	CreateMeta(ctx context.Context, path []string, content string)
+	DeleteMeta(ctx context.Context, path []string)
+	DeleteMetaContent(ctx context.Context, path []string, content string)
 }
 
 type ProjectManager interface {
@@ -66,7 +67,6 @@ type ProjectManager interface {
 	Create(ctx context.Context, proj *Project) error
 	Update(ctx context.Context, proj *Project, initiator Initiator) error
 	Delete(ctx context.Context, id ulid.ULID) error
-	Watch(ctx context.Context) chan *Project
 }
 
 type ImageManager interface {
@@ -75,7 +75,6 @@ type ImageManager interface {
 	Create(ctx context.Context, img *Image) error
 	Update(ctx context.Context, img *Image, initiator Initiator) error
 	Delete(ctx context.Context, id ulid.ULID) error
-	Watch(ctx context.Context) chan *Image
 }
 
 type DiskManager interface {

@@ -22,7 +22,6 @@ import (
 	"github.com/antonf/minicloud/db"
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
-	"log"
 	"strings"
 )
 
@@ -44,14 +43,14 @@ var (
 	prefix = "/minicloud/db/meta/notify-fsm/"
 )
 
-func splitEntityAndId(key string) (string, ulid.ULID) {
+func splitEntityAndId(ctx context.Context, key string) (string, ulid.ULID) {
 	elements := strings.Split(key[len(prefix):], "/")
 	if len(elements) != 2 {
-		log.Printf("fsm: invalid notification key: %s", key)
+		logger.Error(ctx, "invalid notification key", "key", key)
 		return "", utils.Zero
 	}
 	if id, err := ulid.Parse(elements[1]); err != nil {
-		log.Printf("fsm: failed to parse key=%s: %s", key, err)
+		logger.Error(ctx, "failed to parse entity id", "entity", elements[0], "id", elements[1], "error", err)
 		return "", utils.Zero
 	} else {
 		return elements[0], id
@@ -59,17 +58,17 @@ func splitEntityAndId(key string) (string, ulid.ULID) {
 }
 
 func handleNotification(ctx context.Context, conn db.Connection, rv *db.RawValue) {
-	entityName, id := splitEntityAndId(rv.Key)
+	entityName, id := splitEntityAndId(ctx, rv.Key)
 	if getter, ok := entityGetters[entityName]; ok {
 		entity, err := getter(ctx, conn, id)
 		if err != nil {
-			log.Printf("fsm: failed to get entity name=%s id=%s: %s", entityName, id, err)
+			logger.Error(ctx, "failed to get entity", "entity_name", entityName, "id", id, "error", err)
 			return
 		}
 		if fsm := machines[entityName]; fsm != nil {
 			fsm.InvokeHook(ctx, conn, entity)
 		} else {
-			log.Printf("fsm: no machine for entity name=%s", entityName)
+			logger.Error(ctx, "no machine for entity", "entity_name", entityName)
 		}
 	}
 }
@@ -77,15 +76,15 @@ func handleNotification(ctx context.Context, conn db.Connection, rv *db.RawValue
 func WatchNotifications(ctx context.Context, conn db.Connection) {
 	notifyCh := conn.RawWatchPrefix(ctx, prefix)
 	go func() {
-		var maxModRev int64
+		var minRev int64
 		notifications, err := conn.RawReadPrefix(ctx, prefix)
 		if err != nil {
-			log.Fatalf("fsm: failed to read notifications: %s", err)
+			logger.Error(ctx, "failed to read notifications", "error", err)
 		}
 		for _, rv := range notifications {
 			handleNotification(ctx, conn, &rv)
-			if rv.ModifyRev > maxModRev {
-				maxModRev = rv.ModifyRev
+			if rv.ModifyRev > minRev {
+				minRev = rv.ModifyRev
 			}
 		}
 		for {
@@ -94,11 +93,12 @@ func WatchNotifications(ctx context.Context, conn db.Connection) {
 				if rv == nil {
 					return
 				}
-				if rv.ModifyRev > maxModRev {
+				if rv.ModifyRev > minRev {
 					handleNotification(ctx, conn, rv)
-					maxModRev = rv.ModifyRev
+					minRev = rv.ModifyRev
 				} else {
-					log.Printf("fsm: skipping key=%s", rv.Key)
+					logger.Notice(ctx, "skipping stale notification",
+						"key", rv.Key, "rev", rv.ModifyRev, "min_rev", minRev)
 				}
 			case <-ctx.Done():
 				return

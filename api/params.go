@@ -18,9 +18,8 @@
 package api
 
 import (
+	"context"
 	"github.com/oklog/ulid"
-	"log"
-	"strings"
 )
 
 type KeyValue struct {
@@ -39,22 +38,22 @@ func (params PathParams) Keys() []string {
 	return keys
 }
 
-func (params PathParams) GetULID(name string) ulid.ULID {
+func (params PathParams) GetULID(ctx context.Context, name string) ulid.ULID {
 	for i := range params {
 		if params[i].Key == name {
 			return params[i].UlidValue
 		}
 	}
-	log.Panicf("api: params: param '%s' not found in: '%s'", name, strings.Join(params.Keys(), "', '"))
+	logger.Panic(ctx, "parameter not found", "name", name, "valid", params.Keys())
 	return ulid.ULID{}
 }
 
-func (params PathParams) GetString(name string) string {
+func (params PathParams) GetString(ctx context.Context, name string) string {
 	for i := range params {
 		if params[i].Key == name {
 			return params[i].StringValue
 		}
 	}
-	log.Panicf("api: params: param '%s' not found in: '%s'", name, strings.Join(params.Keys(), "', '"))
+	logger.Panic(ctx, "parameter not found", "name", name, "valid", params.Keys())
 	return ""
 }

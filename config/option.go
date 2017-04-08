@@ -22,7 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/antonf/minicloud/db"
-	"log"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -80,7 +80,8 @@ func (hdr *header) update(curValRv, newValRv reflect.Value) bool {
 
 func (hdr *header) checkInitialized() {
 	if hdr.rev < 0 {
-		log.Fatalf("config: opt: value used before init")
+		fmt.Fprintf(os.Stderr, "Option '%s' value used before init", hdr.name)
+		os.Exit(1)
 	}
 }
 
@@ -97,7 +98,8 @@ func registerOpt(opt option) {
 	defer optionsMutex.Unlock()
 	hdr := opt.headerPtr()
 	if _, ok := options[hdr.name]; ok {
-		log.Fatalf("config: opt '%s' already exists", hdr.name)
+		fmt.Fprintf(os.Stderr, "Duplicate option name: %s", hdr.name)
+		os.Exit(1)
 	}
 	options[hdr.name] = opt
 }
@@ -108,8 +110,8 @@ func processConfigEvents(ctx context.Context, rawValueCh chan *db.RawValue) {
 		case <-ctx.Done():
 			return
 		case rawValue := <-rawValueCh:
-			if opt := getOption(rawValue); opt != nil {
-				updateOption(opt, rawValue)
+			if opt := getOption(ctx, rawValue); opt != nil {
+				updateOption(ctx, opt, rawValue)
 			}
 		}
 	}
@@ -121,15 +123,16 @@ func initializeOpt(ctx context.Context, opt option, conn db.Connection) {
 	if rawValue, err := conn.RawRead(ctx, key); err != nil {
 		fmt.Printf("config: error getting opt '%s' initial value: %s", hdr.name, err)
 	} else {
-		updateOption(opt, rawValue)
+		updateOption(ctx, opt, rawValue)
 	}
 }
 
-func updateOption(opt option, rawValue *db.RawValue) {
+func updateOption(ctx context.Context, opt option, rawValue *db.RawValue) {
 	hdr := opt.headerPtr()
 	hdr.Lock()
 	defer hdr.Unlock()
 	if rawValue.ModifyRev < hdr.rev {
+		logger.Notice(ctx, "ignoring stale value", "value_rev", rawValue.ModifyRev, "option_rev", hdr.rev)
 		return
 	}
 	hdr.rev = rawValue.ModifyRev
@@ -138,27 +141,27 @@ func updateOption(opt option, rawValue *db.RawValue) {
 	if rawValue.Data != nil {
 		newValRv := reflect.New(curValRv.Type()).Elem()
 		if err := json.Unmarshal(rawValue.Data, newValRv.Addr().Interface()); err != nil {
-			log.Printf("config: opt: unmarshal '%s' failed: %s", hdr.name, err)
+			logger.Error(ctx, "unmarshal failed", "option", hdr.name, "data", string(rawValue.Data))
 		} else {
 			if hdr.update(curValRv, newValRv) {
-				log.Printf("config: opt: update '%s': [%d] %s", hdr.name, hdr.rev, newValRv)
+				logger.Info(ctx, "option updated", "option", hdr.name, "rev", hdr.rev, "value", newValRv)
 			}
 			return
 		}
 	}
 	defaultValRv := optRv.FieldByName("DefaultValue")
 	if hdr.update(curValRv, defaultValRv) {
-		log.Printf("config: opt: reset to default '%s': [%d] %s", hdr.name, hdr.rev, defaultValRv)
+		logger.Info(ctx, "option reset to default", "option", hdr.name, "rev", hdr.rev, "value", defaultValRv)
 	}
 }
 
-func getOption(rawValue *db.RawValue) option {
+func getOption(ctx context.Context, rawValue *db.RawValue) option {
 	optionsMutex.Lock()
 	defer optionsMutex.Unlock()
 	optionName := rawValue.Key[strings.LastIndex(rawValue.Key, "/")+1:]
 	option, optionExists := options[optionName]
 	if !optionExists {
-		log.Printf("config: unknown opt: %s (key=%s)", optionName, rawValue.Key)
+		logger.Warn(ctx, "unknown option", "option", optionName, "key", rawValue.Key)
 		return nil
 	}
 	return option

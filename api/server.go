@@ -18,6 +18,8 @@
 package api
 
 import (
+	"github.com/antonf/minicloud/log"
+	"github.com/antonf/minicloud/utils"
 	"net/http"
 	"strings"
 )
@@ -31,7 +33,8 @@ func (api *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for path != "" && path[0] == '/' {
 		path = path[1:]
 	}
-	if !processRest(&packedParams{req.Context(), req, w}, api.root, path, nil) {
+	ctx := log.WithValues(req.Context(), "request_id", utils.NewULID())
+	if !processRest(&packedParams{ctx, req, w}, api.root, path, nil) {
 		Respond404(w)
 	}
 }

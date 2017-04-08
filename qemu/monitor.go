@@ -25,7 +25,6 @@ import (
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
 	"io"
-	"log"
 	"net"
 	"os"
 	"sync"
@@ -94,7 +93,7 @@ func NewMonitor(ctx context.Context, path string) (*Monitor, error) {
 						return nil, err
 					}
 					if backoff.Wait() {
-						log.Printf("qemu: connection to %s failed: %s; retrying", path, syscallError)
+						logger.Debug(ctx, "monitor connect failed, retrying", "monitor", path, "error", syscallError)
 						continue
 					}
 				}
@@ -107,14 +106,14 @@ func NewMonitor(ctx context.Context, path string) (*Monitor, error) {
 	}
 
 	if err := mon.handshake(ctx); err != nil {
-		log.Printf("qemu: handshake failed: %s", err)
+		logger.Error(ctx, "monitor handshake failed", "error", err)
 		mon.conn.Close()
 		return nil, err
 	}
 
 	go mon.decodeResponses(ctx)
 	if err := mon.qmpCapabilities(ctx); err != nil {
-		log.Printf("qemu: qmp_capabilities failed: %s %T %s", err, err, err != nil)
+		logger.Error(ctx, "qmp_capabilities command failed", "error", err)
 		mon.Close()
 		return nil, err
 	}
@@ -156,7 +155,7 @@ func (mon *Monitor) handshake(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		log.Printf("qemu: hello recieved: %+v", hello)
+		logger.Debug(ctx, "hello recieved", "hello", hello)
 		return nil
 	}
 }
@@ -180,14 +179,14 @@ func (mon *Monitor) closeRequest(id ulid.ULID) {
 	delete(mon.responses, id)
 }
 
-func (mon *Monitor) sendResponse(resp *response) {
+func (mon *Monitor) sendResponse(ctx context.Context, resp *response) {
 	mon.Lock()
 	defer mon.Unlock()
 	ch := mon.responses[resp.Id]
 	if ch != nil {
 		ch <- resp
 	} else {
-		log.Printf("qemu: unexpected response %+v", resp)
+		logger.Error(ctx, "unexpected response", "response", resp)
 	}
 }
 
@@ -202,7 +201,7 @@ func (mon *Monitor) decodeResponses(ctx context.Context) {
 				if err == io.EOF {
 					return
 				}
-				log.Printf("qemu: monitor %s error: %s", mon.path, err)
+				logger.Error(ctx, "error reading from monitor", "monitor", mon.path, "error", err)
 				ch <- nil
 			} else {
 				ch <- resp
@@ -218,12 +217,15 @@ func (mon *Monitor) decodeResponses(ctx context.Context) {
 		case resp := <-ch:
 			if resp != nil {
 				if resp.Id.Time() != 0 {
-					mon.sendResponse(resp)
+					mon.sendResponse(ctx, resp)
 				} else {
 					timestamp := time.Unix(
 						resp.Timestamp.Seconds,
 						resp.Timestamp.Microseconds*1000)
-					log.Printf("qemu: event=%s timestamp=%s data=%s", resp.Event, timestamp, string(resp.Data))
+					logger.Debug(ctx, "monitor event",
+						"event", resp.Event,
+						"timestamp", timestamp,
+						"data", string(resp.Data))
 				}
 			} else {
 				return

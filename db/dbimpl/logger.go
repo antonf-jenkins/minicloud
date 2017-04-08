@@ -15,48 +15,8 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package log
+package dbimpl
 
-import (
-	"os"
-	"strconv"
-)
+import "github.com/antonf/minicloud/log"
 
-type Level int
-
-const (
-	LevelDebug Level = iota
-	LevelInfo
-	LevelNotice
-	LevelWarning
-	LevelError
-	LevelPanic
-	LevelFatal
-
-	MaxLevelStringLen = 6
-)
-
-func (lvl Level) String() string {
-	switch lvl {
-	case LevelFatal:
-		return "fatal"
-	case LevelPanic:
-		return "panic"
-	case LevelError:
-		return "error"
-	case LevelWarning:
-		return "warn"
-	case LevelNotice:
-		return "notice"
-	case LevelInfo:
-		return "info"
-	case LevelDebug:
-		return "debug"
-	default:
-		os.Stderr.WriteString("Invalid log level: ")
-		os.Stderr.WriteString(strconv.Itoa(int(lvl)))
-		os.Stderr.WriteString("\n")
-		os.Exit(100)
-		return "invalid"
-	}
-}
+var logger = log.New("dbimpl")

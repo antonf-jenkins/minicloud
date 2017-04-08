@@ -81,12 +81,12 @@ func validateUpdateImage(img *db.Image, initiator db.Initiator) error {
 	return nil
 }
 
-func claimUniqueImageName(img *db.Image, txn db.Transaction) {
-	txn.ClaimUnique(img, "name", img.ProjectId.String(), img.Name)
+func claimUniqueImageName(ctx context.Context, img *db.Image, txn db.Transaction) {
+	txn.ClaimUnique(ctx, img, "name", img.ProjectId.String(), img.Name)
 }
 
-func forfeitUniqueImageName(img *db.Image, txn db.Transaction) {
-	txn.ForfeitUnique(img, "name", img.ProjectId.String(), img.Name)
+func forfeitUniqueImageName(ctx context.Context, img *db.Image, txn db.Transaction) {
+	txn.ForfeitUnique(ctx, img, "name", img.ProjectId.String(), img.Name)
 }
 
 type etcdImageManager struct {
@@ -124,9 +124,9 @@ func (im *etcdImageManager) Create(ctx context.Context, img *db.Image) error {
 	proj.ImageIds = append(proj.ImageIds, img.Id)
 
 	txn := c.NewTransaction()
-	txn.Create(img)
-	txn.Update(proj)
-	claimUniqueImageName(img, txn)
+	txn.Create(ctx, img)
+	txn.Update(ctx, proj)
+	claimUniqueImageName(ctx, img, txn)
 	return txn.Commit(ctx)
 }
 
@@ -138,10 +138,10 @@ func (im *etcdImageManager) Update(ctx context.Context, img *db.Image, initiator
 	origImg := img.Original.(*db.Image)
 	txn := c.NewTransaction()
 	if origImg.Name != img.Name {
-		forfeitUniqueImageName(origImg, txn)
-		claimUniqueImageName(img, txn)
+		forfeitUniqueImageName(ctx, origImg, txn)
+		claimUniqueImageName(ctx, img, txn)
 	}
-	txn.Update(img)
+	txn.Update(ctx, img)
 	return txn.Commit(ctx)
 }
 
@@ -162,29 +162,8 @@ func (im *etcdImageManager) Delete(ctx context.Context, id ulid.ULID) error {
 	proj.ImageIds = utils.RemoveULID(proj.ImageIds, img.Id)
 
 	txn := c.NewTransaction()
-	forfeitUniqueImageName(img, txn)
-	txn.Delete(img)
-	txn.Update(proj)
+	forfeitUniqueImageName(ctx, img, txn)
+	txn.Delete(ctx, img)
+	txn.Update(ctx, proj)
 	return txn.Commit(ctx)
-}
-
-func (im *etcdImageManager) Watch(ctx context.Context) chan *db.Image {
-	entityCh := im.conn.watchEntity(ctx, func() db.Entity { return im.NewEntity() })
-	resultCh := make(chan *db.Image)
-	go func() {
-	loop:
-		for {
-			select {
-			case entity := <-entityCh:
-				if entity == nil {
-					break loop
-				}
-				resultCh <- entity.(*db.Image)
-			case <-ctx.Done():
-				break loop
-			}
-		}
-		close(resultCh)
-	}()
-	return resultCh
 }

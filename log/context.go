@@ -34,10 +34,16 @@ type NamedValue struct {
 }
 
 func mergeStructuredData(ctx context.Context, args []interface{}) *NamedValue {
-	newLogContext, _ := ctx.Value(logContext).(*NamedValue)
+	var oldLogContext, list, prev *NamedValue
 
+	if ctx != nil {
+		oldLogContext, _ = ctx.Value(logContext).(*NamedValue)
+	}
+
+	// Build named value list
 	for i := 0; i < len(args); {
-		nv := &NamedValue{next: newLogContext}
+		nv := &NamedValue{next: list}
+		list = nv
 		havePair := false
 		if name, ok := args[i].(string); ok && i+1 < len(args) {
 			nv.Name = name
@@ -50,9 +56,18 @@ func mergeStructuredData(ctx context.Context, args []interface{}) *NamedValue {
 			nv.Value = args[i]
 			i += 1
 		}
-		newLogContext = nv
 	}
-	return newLogContext
+
+	// Reverse named value list
+	prev = oldLogContext
+	for it := list; it != nil; {
+		next := it.next
+		it.next = prev
+		prev = it
+		it = next
+	}
+
+	return prev
 }
 
 func WithValues(ctx context.Context, args ...interface{}) context.Context {

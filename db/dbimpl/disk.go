@@ -94,12 +94,12 @@ func (dm *etcdDiskManager) Create(ctx context.Context, disk *db.Disk) error {
 	}
 
 	txn := c.NewTransaction()
-	txn.Create(disk)
-	txn.Update(proj)
+	txn.Create(ctx, disk)
+	txn.Update(ctx, proj)
 	if img != nil {
-		txn.Update(img)
+		txn.Update(ctx, img)
 	}
-	createFsmNotification(txn, disk, fsm.DiskFSM)
+	createFsmNotification(ctx, txn, disk, fsm.DiskFSM)
 	return txn.Commit(ctx)
 }
 
@@ -109,9 +109,9 @@ func (dm *etcdDiskManager) Update(ctx context.Context, disk *db.Disk, initiator 
 	}
 	c := dm.conn
 	txn := c.NewTransaction()
-	txn.Update(disk)
-	deleteFsmNotification(txn, disk.Original, fsm.DiskFSM)
-	createFsmNotification(txn, disk, fsm.DiskFSM)
+	txn.Update(ctx, disk)
+	deleteFsmNotification(ctx, txn, disk.Original, fsm.DiskFSM)
+	createFsmNotification(ctx, txn, disk, fsm.DiskFSM)
 	return txn.Commit(ctx)
 }
 
@@ -136,8 +136,8 @@ func (dm *etcdDiskManager) Delete(ctx context.Context, id ulid.ULID) error {
 	}
 
 	txn := c.NewTransaction()
-	txn.Delete(disk)
-	txn.Update(proj)
-	deleteFsmNotification(txn, disk, fsm.DiskFSM)
+	txn.Delete(ctx, disk)
+	txn.Update(ctx, proj)
+	deleteFsmNotification(ctx, txn, disk, fsm.DiskFSM)
 	return txn.Commit(ctx)
 }

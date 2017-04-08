@@ -60,12 +60,12 @@ func validateUpdateProject(p *db.Project, initiator db.Initiator) error {
 	return nil
 }
 
-func claimUniqueProjectName(p *db.Project, txn db.Transaction) {
-	txn.ClaimUnique(p, "name", p.Name)
+func claimUniqueProjectName(ctx context.Context, p *db.Project, txn db.Transaction) {
+	txn.ClaimUnique(ctx, p, "name", p.Name)
 }
 
-func forfeitUniqueProjectName(p *db.Project, txn db.Transaction) {
-	txn.ForfeitUnique(p, "name", p.Name)
+func forfeitUniqueProjectName(ctx context.Context, p *db.Project, txn db.Transaction) {
+	txn.ForfeitUnique(ctx, p, "name", p.Name)
 }
 
 type etcdProjectManager struct {
@@ -93,8 +93,8 @@ func (pm *etcdProjectManager) Create(ctx context.Context, proj *db.Project) erro
 	c := pm.conn
 	proj.Id = utils.NewULID()
 	txn := c.NewTransaction()
-	txn.Create(proj)
-	claimUniqueProjectName(proj, txn)
+	txn.Create(ctx, proj)
+	claimUniqueProjectName(ctx, proj, txn)
 	return txn.Commit(ctx)
 }
 
@@ -105,10 +105,10 @@ func (pm *etcdProjectManager) Update(ctx context.Context, proj *db.Project, init
 	c := pm.conn
 	origProj := proj.Original.(*db.Project)
 	txn := c.NewTransaction()
-	txn.Update(proj)
+	txn.Update(ctx, proj)
 	if origProj.Name != proj.Name {
-		forfeitUniqueProjectName(origProj, txn)
-		claimUniqueProjectName(proj, txn)
+		forfeitUniqueProjectName(ctx, origProj, txn)
+		claimUniqueProjectName(ctx, proj, txn)
 	}
 	return txn.Commit(ctx)
 }
@@ -126,28 +126,7 @@ func (pm *etcdProjectManager) Delete(ctx context.Context, id ulid.ULID) error {
 	}
 	c := pm.conn
 	txn := c.NewTransaction()
-	forfeitUniqueProjectName(proj, txn)
-	txn.Delete(proj)
+	forfeitUniqueProjectName(ctx, proj, txn)
+	txn.Delete(ctx, proj)
 	return txn.Commit(ctx)
-}
-
-func (pm *etcdProjectManager) Watch(ctx context.Context) chan *db.Project {
-	entityCh := pm.conn.watchEntity(ctx, func() db.Entity { return pm.NewEntity() })
-	resultCh := make(chan *db.Project)
-	go func() {
-	loop:
-		for {
-			select {
-			case entity := <-entityCh:
-				if entity == nil {
-					break loop
-				}
-				resultCh <- entity.(*db.Project)
-			case <-ctx.Done():
-				break loop
-			}
-		}
-		close(resultCh)
-	}()
-	return resultCh
 }

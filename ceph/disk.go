@@ -18,33 +18,40 @@
 package ceph
 
 import (
+	"context"
+	"github.com/antonf/minicloud/log"
 	"github.com/ceph/go-ceph/rbd"
-	"log"
 )
 
-func CreateEmptyDisk(pool, name string, size uint64) error {
+func CreateEmptyDisk(ctx context.Context, pool, name string, size uint64) error {
+	opCtx := log.WithValues(ctx, "pool", pool, "name", name, "size", size)
+
 	// Create connection; defer shutdown
-	conn, err := NewConnection(pool)
+	conn, err := NewConnection(ctx, pool)
 	if err != nil {
-		log.Printf("ceph: new connection failed: %s", err)
 		return err
 	}
 	defer conn.Close()
 
 	// Create image
 	if _, err := rbd.Create(conn.ioctx[pool], name, size, OptDiskOrder.Value()); err != nil {
-		log.Printf("ceph: create disk pool=%s name=%s: %s", pool, name, err)
+		logger.Error(opCtx, "error creating disk", "error", err)
 		return err
 	}
 
+	logger.Info(opCtx, "created empty disk")
 	return nil
 }
 
-func CreateDiskFromImage(diskPool, diskName, imagePool, imageName, snap string, size uint64) error {
+func CreateDiskFromImage(ctx context.Context, diskPool, diskName, imagePool, imageName, snap string, size uint64) error {
+	opCtx := log.WithValues(ctx,
+		"disk_pool", diskPool, "disk_name", diskName,
+		"image_pool", imagePool, "image_name", imageName,
+		"size", size)
+
 	// Create connection; defer shutdown
-	conn, err := NewConnection(imagePool, diskPool)
+	conn, err := NewConnection(ctx, imagePool, diskPool)
 	if err != nil {
-		log.Printf("ceph: new connection failed: %s", err)
 		return err
 	}
 	defer conn.Close()
@@ -53,34 +60,34 @@ func CreateDiskFromImage(diskPool, diskName, imagePool, imageName, snap string, 
 	image := rbd.GetImage(conn.ioctx[imagePool], imageName)
 	disk, err := image.Clone(snap, conn.ioctx[diskPool], diskName, RbdFeaturesDefault, OptDiskOrder.Value())
 	if err != nil {
-		log.Printf(
-			"ceph: failed to clone image diskPool=%s diskName=%s imagePool=%s imageName=%s: %s",
-			diskPool, diskName, imagePool, imageName, err)
+		logger.Error(opCtx, "failed to clone image", "error", err)
 		return err
 	}
 
 	// Resize result
 	if err := disk.Open(); err != nil {
-		log.Printf("ceph: open disk error pool=%s name=%s: %s", diskPool, diskName, err)
+		logger.Error(opCtx, "failed to open disk", "error", err)
 		return err
 	}
 	defer disk.Close()
 	if err := disk.Resize(size); err != nil {
-		log.Printf("ceph: failed to resize disk pool=%s name=%s : %s", diskPool, diskName, err)
+		logger.Error(opCtx, "failed to resize disk", "error", err)
 		if removeErr := disk.Remove(); removeErr != nil {
-			log.Printf("ceph: failed to remove disk pool=%s name=%s: %s", diskPool, diskName, removeErr)
+			logger.Error(opCtx, "failed to remove disk after failure", "error", removeErr)
 		}
 		return err
 	}
 
+	logger.Info(opCtx, "created disk from image")
 	return nil
 }
 
-func ResizeDisk(pool, name string, size uint64) error {
+func ResizeDisk(ctx context.Context, pool, name string, size uint64) error {
+	opCtx := log.WithValues(ctx, "pool", pool, "name", name, "size", size)
+
 	// Create connection; defer shutdown
-	conn, err := NewConnection(pool)
+	conn, err := NewConnection(ctx, pool)
 	if err != nil {
-		log.Printf("ceph: new connection failed: %s", err)
 		return err
 	}
 	defer conn.Close()
@@ -88,24 +95,29 @@ func ResizeDisk(pool, name string, size uint64) error {
 	// Open disk
 	disk := rbd.GetImage(conn.ioctx[pool], name)
 	if err := disk.Open(); err != nil {
-		log.Printf("ceph: open disk error pool=%s name=%s: %s", pool, name, err)
+		logger.Error(opCtx, "failed to open disk", "error", err)
 		return err
 	}
 	defer disk.Close()
 
 	// Check old size
-	if oldSize, err := disk.GetSize(); err != nil {
-		log.Printf("ceph: get disk size error pool=%s name=%s: %s", pool, name, err)
+	oldSize, err := disk.GetSize()
+	if err != nil {
+		logger.Error(opCtx, "failed to get disk size", "error", err)
 		return err
-	} else if oldSize == size {
+	}
+	defer disk.Close()
+	if oldSize == size {
+		logger.Info(opCtx, "size not changed", "old_size", oldSize)
 		return nil
 	}
 
 	// Resize disk
 	if err := disk.Resize(size); err != nil {
-		log.Printf("ceph: failed to resize disk pool=%s name=%s : %s", pool, name, err)
+		logger.Error(opCtx, "failed to resize disk", "error", err)
 		return err
 	}
 
+	logger.Info(opCtx, "disk resized")
 	return nil
 }

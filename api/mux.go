@@ -20,7 +20,6 @@ package api
 import (
 	"context"
 	"github.com/oklog/ulid"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -93,7 +92,7 @@ type MountPoint struct {
 
 func (mp *MountPoint) Mount(method string, handler Handler) {
 	if mp.handlers[method] != nil {
-		log.Fatalf("api: mux: method '%s' already mounted at '%s'", method, mp.source)
+		logger.Fatal(nil, "method already mounted", "method", method, "mountpoint", mp.source)
 		return
 	}
 	mp.handlers[method] = handler
@@ -191,7 +190,7 @@ func newProc(source string) interface{} {
 		case "ulid":
 			return &ulidParamProc{name}
 		default:
-			log.Panicf("api: mux: unknown parameter type: %s", ty)
+			logger.Panic(nil, "unknown parameter type", "type", ty)
 			return nil
 		}
 	} else {

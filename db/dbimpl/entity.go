@@ -23,9 +23,9 @@ import (
 	"fmt"
 	"github.com/antonf/minicloud/db"
 	"github.com/antonf/minicloud/fsm"
+	"github.com/antonf/minicloud/log"
 	"github.com/antonf/minicloud/utils"
 	backend "github.com/coreos/etcd/clientv3"
-	"log"
 	"reflect"
 	"regexp"
 	"strings"
@@ -52,19 +52,21 @@ func (c *etcdConeection) loadEntity(ctx context.Context, entity db.Entity) error
 	entityName := GetEntityName(entity)
 	entityId := entity.Header().Id
 	key := dataKey(entity)
-	log.Printf("db: loading entity=%s id=%s key=%s", entityName, entityId, key)
+	opCtx := log.WithValues(ctx, "entity", entity, "key", key)
+
+	logger.Debug(opCtx, "loading entity")
 	resp, err := c.client.Get(ctx, key, backend.WithSerializable())
 	if err != nil {
-		log.Printf("db: get %s failed: %s", key, err)
+		logger.Error(opCtx, "etcd get failed", "error", err)
 		return err
 	}
 	if resp.Count == 0 {
-		log.Printf("db: entity not found entityName=%s id=%s", entityName, entityId)
+		logger.Info(opCtx, "entity not found")
 		return &db.NotFoundError{entityName, entityId}
 	}
 	kv := resp.Kvs[0]
 	if err = json.Unmarshal(kv.Value, entity); err != nil {
-		log.Printf("db: unmarshal failed data='%s': %s", kv.Value, err)
+		logger.Error(ctx, "unmarshal failed", "option", "error", err, "data", string(kv.Value))
 		return err
 	}
 	hdr := entity.Header()
@@ -74,55 +76,21 @@ func (c *etcdConeection) loadEntity(ctx context.Context, entity db.Entity) error
 	return nil
 }
 
-func (c *etcdConeection) watchEntity(ctx context.Context, newEntity func() db.Entity) chan db.Entity {
-	entityName := GetEntityName(newEntity())
-	prefix := fmt.Sprintf("%s/%s/", DataPrefix, entityName)
-	log.Printf("db: watching entity=%s prefix=%s", entityName, prefix)
-	rawCh := c.RawWatchPrefix(ctx, prefix)
-	resultCh := make(chan db.Entity)
-	go func() {
-	loop:
-		for {
-			select {
-			case rawVal := <-rawCh:
-				if rawVal == nil {
-					break loop
-				}
-				entity := newEntity()
-				if err := json.Unmarshal(rawVal.Data, entity); err != nil {
-					log.Printf("db: watch: unmarshal failed data='%s': %s", string(rawVal.Data), err)
-					continue
-				}
-				hdr := entity.Header()
-				hdr.CreateRev = rawVal.CreateRev
-				hdr.ModifyRev = rawVal.ModifyRev
-				hdr.Original = utils.MakeStructCopy(entity).(db.Entity)
-				resultCh <- entity
-			case <-ctx.Done():
-				break loop
-			}
-		}
-		log.Printf("db: stopped watching entity=%s prefix=%s", entityName, prefix)
-		close(resultCh)
-	}()
-	return resultCh
-}
-
-func createFsmNotification(tx db.Transaction, entity db.Entity, fsm *fsm.StateMachine) {
+func createFsmNotification(ctx context.Context, tx db.Transaction, entity db.Entity, fsm *fsm.StateMachine) {
 	state := entity.Header().State
 	entityId := entity.Header().Id.String()
 	entityName := GetEntityName(entity)
 	if fsm.NeedNotify(state) {
-		tx.CreateMeta([]string{"notify-fsm", entityName, entityId}, entityId)
+		tx.CreateMeta(ctx, []string{"notify-fsm", entityName, entityId}, entityId)
 	}
 }
 
-func deleteFsmNotification(tx db.Transaction, entity db.Entity, fsm *fsm.StateMachine) {
+func deleteFsmNotification(ctx context.Context, tx db.Transaction, entity db.Entity, fsm *fsm.StateMachine) {
 	state := entity.Header().State
 	entityId := entity.Header().Id.String()
 	entityName := GetEntityName(entity)
 	if fsm.NeedNotify(state) {
-		tx.DeleteMeta([]string{"notify-fsm", entityName, entityId}, entityId)
+		tx.DeleteMeta(ctx, []string{"notify-fsm", entityName, entityId})
 	}
 }
 

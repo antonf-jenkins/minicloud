@@ -43,7 +43,7 @@ type Logger interface {
 	Fatal(ctx context.Context, message string, args ...interface{})
 }
 
-func NewLogger(name string) Logger {
+func New(name string) Logger {
 	return &logger{name}
 }
 
@@ -70,51 +70,43 @@ type logger struct {
 	name string
 }
 
-func (logger *logger) log(ctx context.Context, level Level, waitDelivery bool, message string, args ...interface{}) {
+func (logger *logger) log(ctx context.Context, level Level, message string, args ...interface{}) {
 	msg := msgPool.Get().(*Message)
 	msg.Time = time.Now().UTC()
 	msg.Level = level
 	msg.Logger = logger.name
 	msg.Message = message
 	msg.StructuredData = mergeStructuredData(ctx, args)
-	var waitCh chan struct{}
-	if waitDelivery {
-		waitCh = make(chan struct{})
-		msg.delivered = waitCh
-	}
 	sink <- msg
-	if waitDelivery {
-		// Wait on waitCh, as msg could be changed
-		<-waitCh
-	}
 }
 
 func (logger *logger) Debug(ctx context.Context, message string, args ...interface{}) {
-	logger.log(ctx, LevelDebug, false, message, args...)
+	logger.log(ctx, LevelDebug, message, args...)
 }
 
 func (logger *logger) Info(ctx context.Context, message string, args ...interface{}) {
-	logger.log(ctx, LevelInfo, false, message, args...)
+	logger.log(ctx, LevelInfo, message, args...)
 }
 
 func (logger *logger) Notice(ctx context.Context, message string, args ...interface{}) {
-	logger.log(ctx, LevelNotice, false, message, args...)
+	logger.log(ctx, LevelNotice, message, args...)
 }
 
 func (logger *logger) Warn(ctx context.Context, message string, args ...interface{}) {
-	logger.log(ctx, LevelWarning, false, message, args...)
+	logger.log(ctx, LevelWarning, message, args...)
 }
 
 func (logger *logger) Error(ctx context.Context, message string, args ...interface{}) {
-	logger.log(ctx, LevelError, false, message, args...)
+	logger.log(ctx, LevelError, message, args...)
 }
 
 func (logger *logger) Panic(ctx context.Context, message string, args ...interface{}) {
-	logger.log(ctx, LevelError, false, message, args...)
+	logger.log(ctx, LevelError, message, args...)
 	panic(message)
 }
 
 func (logger *logger) Fatal(ctx context.Context, message string, args ...interface{}) {
-	logger.log(ctx, LevelFatal, true, message, args...)
+	logger.log(ctx, LevelFatal, message, args...)
+	Sync()
 	os.Exit(1)
 }

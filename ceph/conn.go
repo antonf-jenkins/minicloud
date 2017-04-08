@@ -18,9 +18,9 @@
 package ceph
 
 import (
+	"context"
 	"github.com/antonf/minicloud/config"
 	"github.com/ceph/go-ceph/rados"
-	"log"
 )
 
 var (
@@ -35,7 +35,7 @@ type connection struct {
 	ioctx map[string]*rados.IOContext
 }
 
-func setConfigOptions(conn *rados.Conn, options ...string) error {
+func setConfigOptions(ctx context.Context, conn *rados.Conn, options ...string) error {
 	optLen := len(options)
 	if optLen%2 != 0 {
 		panic("Odd number of arguments passed to setConfigOptions")
@@ -44,33 +44,34 @@ func setConfigOptions(conn *rados.Conn, options ...string) error {
 		key := options[i]
 		value := options[i+1]
 		if err := conn.SetConfigOption(key, value); err != nil {
-			log.Printf("ceph: rados: error setting option %s=%s: %s", key, value, err)
+			logger.Error(ctx, "error setting option", "key", key, "value", value, "error", err)
 			return err
 		}
 	}
 	return nil
 }
 
-func NewConnection(pools ...string) (*connection, error) {
+func NewConnection(ctx context.Context, pools ...string) (*connection, error) {
 	conn, err := rados.NewConn()
 	if err != nil {
-		log.Printf("ceph: new conn error: %s", err)
+		logger.Error(ctx, "failed to create connection object", "error", err)
 		return nil, err
 	}
-	err = setConfigOptions(conn,
+	err = setConfigOptions(ctx, conn,
 		"mon_host", OptMonHost.Value(),
 		"key", OptKey.Value())
 	if err != nil {
 		return nil, err
 	}
 	if err := conn.Connect(); err != nil {
+		logger.Error(ctx, "failed to connect", "error", err)
 		return nil, err
 	}
 
 	result := connection{conn, make(map[string]*rados.IOContext)}
 	for _, pool := range pools {
 		if ioctx, err := conn.OpenIOContext(pool); err != nil {
-			log.Printf("ceph: open ioctx pool=%s: %s", pool, err)
+			logger.Error(ctx, "failed to open ioctx", "pool", pool, "error", err)
 			result.Close()
 			return nil, err
 		} else {

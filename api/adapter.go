@@ -108,7 +108,7 @@ func (mh *managerHandlers) handlePost(ctx context.Context, w http.ResponseWriter
 }
 
 func (mh *managerHandlers) handleGet(ctx context.Context, w http.ResponseWriter, req *http.Request, params PathParams) {
-	entity, err := mh.get(ctx, params.GetULID("id"))
+	entity, err := mh.get(ctx, params.GetULID(ctx, "id"))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -123,7 +123,7 @@ func (mh *managerHandlers) handleGet(ctx context.Context, w http.ResponseWriter,
 }
 
 func (mh *managerHandlers) handlePut(ctx context.Context, w http.ResponseWriter, req *http.Request, params PathParams) {
-	entity, err := mh.get(ctx, params.GetULID("id"))
+	entity, err := mh.get(ctx, params.GetULID(ctx, "id"))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -141,7 +141,7 @@ func (mh *managerHandlers) handlePut(ctx context.Context, w http.ResponseWriter,
 }
 
 func (mh *managerHandlers) handleDelete(ctx context.Context, w http.ResponseWriter, req *http.Request, params PathParams) {
-	err := mh.delete(ctx, params.GetULID("id"))
+	err := mh.delete(ctx, params.GetULID(ctx, "id"))
 	if err != nil {
 		writeError(w, err)
 		return

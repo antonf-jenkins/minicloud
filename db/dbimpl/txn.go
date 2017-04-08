@@ -25,7 +25,6 @@ import (
 	"github.com/antonf/minicloud/utils"
 	backend "github.com/coreos/etcd/clientv3"
 	"github.com/oklog/ulid"
-	"log"
 	"strings"
 )
 
@@ -54,13 +53,14 @@ func (t *etcdTransaction) addOp(op backend.Op) {
 
 func (t *etcdTransaction) Commit(ctx context.Context) error {
 	if t.err != nil {
-		log.Printf("db: txn %s: previous error, aborting: %s", t.xid, t.err)
+		logger.Error(ctx, "aborting transaction", "xid", t.xid, "error", t.err)
 		return t.err
 	}
-	log.Printf("db: txn %s: committing", t.xid)
+	logger.Error(ctx, "commiting transaction", "xid", t.xid)
 	txn := t.conn.client.KV.Txn(ctx)
 	resp, err := txn.If(t.cmps...).Then(t.ops...).Commit()
 	if err != nil {
+		logger.Error(ctx, "error commiting transaction", "xid", t.xid, "error", err)
 		return err
 	}
 	if !resp.Succeeded {
@@ -69,14 +69,14 @@ func (t *etcdTransaction) Commit(ctx context.Context) error {
 	return nil
 }
 
-func (t *etcdTransaction) Create(entity db.Entity) {
+func (t *etcdTransaction) Create(ctx context.Context, entity db.Entity) {
 	if t.err != nil {
 		return
 	}
-	log.Printf("db: txn %s: creating entity=%s", t.xid, entity)
+	logger.Debug(ctx, "creating entity", "xid", t.xid, "entity", entity)
 	marshaledEntity, err := json.Marshal(entity)
 	if err != nil {
-		log.Printf("db: txn %s: marshal failed: %s", t.xid, err)
+		logger.Debug(ctx, "marshal failed", "xid", t.xid, "entity", entity, "error", err)
 		t.err = err
 		return
 	}
@@ -85,14 +85,14 @@ func (t *etcdTransaction) Create(entity db.Entity) {
 	t.addOp(backend.OpPut(key, string(marshaledEntity)))
 }
 
-func (t *etcdTransaction) Update(entity db.Entity) {
+func (t *etcdTransaction) Update(ctx context.Context, entity db.Entity) {
 	if t.err != nil {
 		return
 	}
-	log.Printf("db: txn %s: updating entity=%s", t.xid, entity)
+	logger.Debug(ctx, "updating entity", "xid", t.xid, "entity", entity)
 	marshaledEntity, err := json.Marshal(entity)
 	if err != nil {
-		log.Printf("db: txn %s: marshal failed: %s", t.xid, err)
+		logger.Debug(ctx, "marshal failed", "xid", t.xid, "entity", entity, "error", err)
 		t.err = err
 		return
 	}
@@ -102,21 +102,21 @@ func (t *etcdTransaction) Update(entity db.Entity) {
 	t.addOp(backend.OpPut(key, string(marshaledEntity)))
 }
 
-func (t *etcdTransaction) Delete(entity db.Entity) {
+func (t *etcdTransaction) Delete(ctx context.Context, entity db.Entity) {
 	if t.err != nil {
 		return
 	}
-	log.Printf("db: txn %s: deleting entity=%s", t.xid, entity)
+	logger.Debug(ctx, "deleting entity", "xid", t.xid, "entity", entity)
 	key := dataKey(entity)
 	t.addCmp(backend.ModRevision(key), "=", entity.Header().ModifyRev)
 	t.addOp(backend.OpDelete(key))
 }
 
-func (t *etcdTransaction) ForceDelete(entityName string, id ulid.ULID) {
+func (t *etcdTransaction) ForceDelete(ctx context.Context, entityName string, id ulid.ULID) {
 	if t.err != nil {
 		return
 	}
-	log.Printf("db: txn %s: deleting entityName=%s id=%s", t.xid, entityName, id)
+	logger.Debug(ctx, "force deleting entity", "xid", t.xid, "entity_name", entityName, "id", id)
 	key := fmt.Sprintf("%s/%s/%s", DataPrefix, entityName, id)
 	t.addOp(backend.OpDelete(key))
 }
@@ -125,46 +125,55 @@ func metaKey(name string, spec []string) string {
 	return fmt.Sprintf("%s/%s/%s", MetaPrefix, name, strings.Join(spec, "/"))
 }
 
-func (t *etcdTransaction) ClaimUnique(entity db.Entity, spec ...string) {
+func (t *etcdTransaction) ClaimUnique(ctx context.Context, entity db.Entity, spec ...string) {
 	if t.err != nil {
 		return
 	}
 	entityName := GetEntityName(entity)
 	key := metaKey(entityName, spec)
-	log.Printf("db: txn %s: claim unique entity=%s key=%s", t.xid, entityName, key)
+	logger.Debug(ctx, "claim unique", "entity_name", entityName, "spec", spec, "xid", t.xid)
 	entityId := entity.Header().Id.String()
 	t.addCmp(backend.Version(key), "=", 0)
 	t.addOp(backend.OpPut(key, entityId))
 }
 
-func (t *etcdTransaction) ForfeitUnique(entity db.Entity, spec ...string) {
+func (t *etcdTransaction) ForfeitUnique(ctx context.Context, entity db.Entity, spec ...string) {
 	if t.err != nil {
 		return
 	}
 	entityName := GetEntityName(entity)
 	key := metaKey(entityName, spec)
-	log.Printf("db: txn %s: forfeit unique entity=%s key=%s", t.xid, entityName, key)
+	logger.Debug(ctx, "forfeit unique", "entity_name", entityName, "spec", spec, "xid", t.xid)
 	entityId := entity.Header().Id.String()
 	t.addCmp(backend.Value(key), "=", entityId)
 	t.addOp(backend.OpDelete(key))
 }
 
-func (t *etcdTransaction) CreateMeta(path []string, content string) {
+func (t *etcdTransaction) CreateMeta(ctx context.Context, path []string, content string) {
 	if t.err != nil {
 		return
 	}
 	key := MetaPrefix + "/" + strings.Join(path, "/")
-	log.Printf("db: txn %s: create meta %s: %s", t.xid, key, content)
+	logger.Debug(ctx, "create meta", "path", path, "content", content, "xid", t.xid)
 	t.addCmp(backend.Version(key), "=", 0)
 	t.addOp(backend.OpPut(key, content))
 }
 
-func (t *etcdTransaction) DeleteMeta(path []string, content string) {
+func (t *etcdTransaction) DeleteMeta(ctx context.Context, path []string) {
 	if t.err != nil {
 		return
 	}
 	key := MetaPrefix + "/" + strings.Join(path, "/")
-	log.Printf("db: txn %s: delete meta %s: %s", t.xid, key, content)
+	logger.Debug(ctx, "delete meta", "path", path, "xid", t.xid)
+	t.addOp(backend.OpDelete(key))
+}
+
+func (t *etcdTransaction) DeleteMetaContent(ctx context.Context, path []string, content string) {
+	if t.err != nil {
+		return
+	}
+	key := MetaPrefix + "/" + strings.Join(path, "/")
+	logger.Debug(ctx, "check content and delete meta", "path", path, "content", content, "xid", t.xid)
 	t.addCmp(backend.Value(key), "=", content)
 	t.addOp(backend.OpDelete(key))
 }

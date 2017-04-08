@@ -21,8 +21,8 @@ import (
 	"context"
 	"github.com/antonf/minicloud/db"
 	"github.com/antonf/minicloud/env"
+	"github.com/antonf/minicloud/log"
 	backend "github.com/coreos/etcd/clientv3"
-	"log"
 	"strings"
 	"time"
 )
@@ -82,11 +82,11 @@ func (c *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string) chan
 	respCh := c.client.Watch(ctx, prefix, backend.WithPrefix())
 	resultCh := make(chan *db.RawValue)
 	go func() {
-		log.Printf("db: raw: watching prefix %s", prefix)
+		logger.Debug(ctx, "watching prefix", "prefix", prefix)
 		for {
 			select {
 			case <-ctx.Done():
-				log.Printf("db: raw: stopped watching prefix %s", prefix)
+				logger.Debug(ctx, "stopped watching prefix", "prefix", prefix)
 				close(resultCh)
 				return
 			case eventBatch := <-respCh:
@@ -105,17 +105,18 @@ func (c *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string) chan
 	return resultCh
 }
 
-func NewConnection() db.Connection {
-	log.Printf("db: init: connecting to %s, timeout %dms...", env.EtcdEndpoints, env.EtcdDialTimeout)
+func NewConnection(ctx context.Context) db.Connection {
+	opCtx := log.WithValues(ctx, "endpoints", env.EtcdEndpoints, "timeout", env.EtcdDialTimeout)
+	logger.Debug(opCtx, "connecting to etcd")
 	cli, err := backend.New(backend.Config{
 		Endpoints:   strings.Split(env.EtcdEndpoints, ","),
 		DialTimeout: time.Duration(env.EtcdDialTimeout) * time.Millisecond,
 	})
 	if err != nil {
-		log.Fatalf("db: init: failed to connect to etcd cluster: %s", err)
+		logger.Error(opCtx, "error connecting to etcd", "error", err)
 	}
 
-	log.Printf("db: init: connected to etcd cluster")
+	logger.Info(opCtx, "connected to etcd cluster")
 	conn := &etcdConeection{client: cli}
 	conn.projectManager = &etcdProjectManager{conn}
 	conn.imageManager = &etcdImageManager{conn}

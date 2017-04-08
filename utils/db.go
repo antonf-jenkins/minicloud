@@ -18,17 +18,17 @@
 package utils
 
 import (
+	"context"
 	"github.com/antonf/minicloud/config"
 	"github.com/antonf/minicloud/db"
-	"log"
 )
 
-func Retry(operationFn func() error) (err error) {
+func Retry(ctx context.Context, operationFn func() error) (err error) {
 	retryCount := config.OptRetryCount.Value()
 	for i := 0; i < retryCount; i++ {
 		if err = operationFn(); err != nil {
 			if _, ok := err.(*db.ConflictError); ok {
-				log.Printf("operation failed attempt=%s: %s", i, err)
+				logger.Error(ctx, "operation failed, trying again", "error", err, "attempt", i)
 				continue
 			}
 		} else {
