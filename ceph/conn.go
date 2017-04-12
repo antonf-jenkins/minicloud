@@ -21,10 +21,12 @@ import (
 	"context"
 	"github.com/antonf/minicloud/config"
 	"github.com/ceph/go-ceph/rados"
+	"strconv"
 )
 
 var (
 	OptMonHost    = config.NewStringOpt("ceph_mon_host", "127.0.0.1")
+	OptMonTimeout = config.NewIntOpt("ceph_mon_session_timeout", 5)
 	OptKey        = config.NewStringOpt("ceph_key", "")
 	OptImageOrder = config.NewIntOpt("ceph_image_order", 18)
 	OptDiskOrder  = config.NewIntOpt("ceph_disk_order", 18)
@@ -59,10 +61,13 @@ func NewConnection(ctx context.Context, pools ...string) (*connection, error) {
 	}
 	err = setConfigOptions(ctx, conn,
 		"mon_host", OptMonHost.Value(),
-		"key", OptKey.Value())
+		"key", OptKey.Value(),
+		"client_mount_timeout", strconv.Itoa(OptMonTimeout.Value()))
 	if err != nil {
 		return nil, err
 	}
+	// TODO: implement ceph connection timeouting
+	logger.Info(ctx, "connecting to ceph", "mon_host", OptMonHost.Value())
 	if err := conn.Connect(); err != nil {
 		logger.Error(ctx, "failed to connect", "error", err)
 		return nil, err

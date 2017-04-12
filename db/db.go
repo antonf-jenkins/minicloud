@@ -59,6 +59,8 @@ type Transaction interface {
 	CreateMeta(ctx context.Context, path []string, content string)
 	DeleteMeta(ctx context.Context, path []string)
 	DeleteMetaContent(ctx context.Context, path []string, content string)
+	AcquireLock(ctx context.Context, key string)
+	ReleaseLock(ctx context.Context, key string)
 }
 
 type ProjectManager interface {

@@ -19,6 +19,7 @@ package dbimpl
 
 import (
 	"context"
+	"errors"
 	"github.com/antonf/minicloud/db"
 	"github.com/antonf/minicloud/env"
 	"github.com/antonf/minicloud/log"
@@ -29,6 +30,7 @@ import (
 
 type etcdConeection struct {
 	client         *backend.Client
+	leaseId        backend.LeaseID
 	projectManager *etcdProjectManager
 	imageManager   *etcdImageManager
 	diskManager    *etcdDiskManager
@@ -105,7 +107,7 @@ func (c *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string) chan
 	return resultCh
 }
 
-func NewConnection(ctx context.Context) db.Connection {
+func NewConnection(ctx context.Context, leaseTTL int64) (db.Connection, error) {
 	opCtx := log.WithValues(ctx, "endpoints", env.EtcdEndpoints, "timeout", env.EtcdDialTimeout)
 	logger.Debug(opCtx, "connecting to etcd")
 	cli, err := backend.New(backend.Config{
@@ -114,12 +116,32 @@ func NewConnection(ctx context.Context) db.Connection {
 	})
 	if err != nil {
 		logger.Error(opCtx, "error connecting to etcd", "error", err)
+		return nil, err
 	}
 
-	logger.Info(opCtx, "connected to etcd cluster")
-	conn := &etcdConeection{client: cli}
+	// Grant lease
+	leaseResp, err := cli.Grant(ctx, leaseTTL)
+	if err != nil {
+		logger.Error(opCtx, "error obtaining lease", "error", err)
+		return nil, err
+	}
+	if leaseResp.Error != "" {
+		logger.Error(opCtx, "leaseResp.Error not empty", "error", leaseResp.Error)
+		return nil, errors.New(leaseResp.Error)
+	}
+
+	// Keep lease alive
+	keepAliveCh, err := cli.KeepAlive(ctx, leaseResp.ID)
+	if err != nil {
+		logger.Error(opCtx, "error keeping lease alive", "error", err)
+		return nil, err
+	}
+	<-keepAliveCh
+
+	logger.Info(opCtx, "connected to etcd cluster", "lease_ttl", leaseResp.TTL)
+	conn := &etcdConeection{client: cli, leaseId: leaseResp.ID}
 	conn.projectManager = &etcdProjectManager{conn}
 	conn.imageManager = &etcdImageManager{conn}
 	conn.diskManager = &etcdDiskManager{conn}
-	return conn
+	return conn, nil
 }

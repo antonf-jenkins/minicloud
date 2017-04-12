@@ -25,6 +25,7 @@ import (
 	"github.com/antonf/minicloud/utils"
 	backend "github.com/coreos/etcd/clientv3"
 	"github.com/oklog/ulid"
+	"strconv"
 	"strings"
 )
 
@@ -56,7 +57,7 @@ func (t *etcdTransaction) Commit(ctx context.Context) error {
 		logger.Error(ctx, "aborting transaction", "xid", t.xid, "error", t.err)
 		return t.err
 	}
-	logger.Error(ctx, "commiting transaction", "xid", t.xid)
+	logger.Debug(ctx, "commiting transaction", "xid", t.xid)
 	txn := t.conn.client.KV.Txn(ctx)
 	resp, err := txn.If(t.cmps...).Then(t.ops...).Commit()
 	if err != nil {
@@ -174,6 +175,22 @@ func (t *etcdTransaction) DeleteMetaContent(ctx context.Context, path []string, 
 	}
 	key := MetaPrefix + "/" + strings.Join(path, "/")
 	logger.Debug(ctx, "check content and delete meta", "path", path, "content", content, "xid", t.xid)
+	t.addCmp(backend.Value(key), "=", content)
+	t.addOp(backend.OpDelete(key))
+}
+
+func (t *etcdTransaction) AcquireLock(ctx context.Context, key string) {
+	leaseId := t.conn.leaseId
+	content := strconv.FormatInt(int64(leaseId), 16)
+	logger.Debug(ctx, "acquiring lock", "key", key, "lease_id", content)
+	t.addCmp(backend.Version(key), "=", 0)
+	t.addOp(backend.OpPut(key, content, backend.WithLease(leaseId)))
+}
+
+func (t *etcdTransaction) ReleaseLock(ctx context.Context, key string) {
+	leaseId := t.conn.leaseId
+	content := strconv.FormatInt(int64(leaseId), 16)
+	logger.Debug(ctx, "releasing lock", "key", key, "content", content)
 	t.addCmp(backend.Value(key), "=", content)
 	t.addOp(backend.OpDelete(key))
 }
