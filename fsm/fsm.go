@@ -19,7 +19,10 @@ package fsm
 
 import (
 	"context"
+	"fmt"
 	"github.com/antonf/minicloud/db"
+	"github.com/antonf/minicloud/utils"
+	"github.com/oklog/ulid"
 )
 
 type Hook func(ctx context.Context, conn db.Connection, entity db.Entity)
@@ -126,4 +129,42 @@ func (fsm *StateMachine) InvokeHook(ctx context.Context, conn db.Connection, ent
 
 func (fsm *StateMachine) NeedNotify(state db.State) bool {
 	return fsm.hooks[state] != nil
+}
+
+func notificationKey(entityName string, id ulid.ULID, state db.State) string {
+	return fmt.Sprintf("%s%s/%s/%s", prefix, entityName, id.String(), state)
+}
+
+func (fsm *StateMachine) Notify(ctx context.Context, tx db.Transaction, entity db.Entity) {
+	hdr := entity.Header()
+	toState := hdr.State
+	fromState := db.StateNone
+	if hdr.Original != nil {
+		fromState = hdr.Original.Header().State
+	}
+	if toState == fromState {
+		return
+	}
+	entityName := db.GetEntityName(entity)
+	if fsm.NeedNotify(fromState) {
+		// Delete previous notification
+		tx.DeleteMeta(ctx, notificationKey(entityName, hdr.Id, fromState))
+	}
+	if fsm.NeedNotify(toState) {
+		// Create notification
+		notificationId := utils.NewULID()
+		logger.Debug(ctx, "creating new notification",
+			"entity", entityName,
+			"state", toState,
+			"notification_id", notificationId)
+		tx.CreateMeta(ctx, notificationKey(entityName, hdr.Id, toState), notificationId.String())
+	}
+}
+
+func (fsm *StateMachine) DeleteNotification(ctx context.Context, tx db.Transaction, entity db.Entity) {
+	hdr := entity.Header()
+	if fsm.NeedNotify(hdr.State) {
+		entityName := db.GetEntityName(entity)
+		tx.DeleteMeta(ctx, notificationKey(entityName, hdr.Id, hdr.State))
+	}
 }

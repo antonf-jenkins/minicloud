@@ -17,7 +17,11 @@
  */
 package db
 
-import "github.com/oklog/ulid"
+import (
+	"github.com/oklog/ulid"
+	"reflect"
+	"strings"
+)
 
 type Entity interface {
 	Header() *EntityHeader
@@ -34,4 +38,12 @@ type EntityHeader struct {
 
 func (hdr *EntityHeader) Header() *EntityHeader {
 	return hdr
+}
+
+func GetEntityName(entity Entity) string {
+	ty := reflect.TypeOf(entity)
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+	return strings.ToLower(ty.Name())
 }

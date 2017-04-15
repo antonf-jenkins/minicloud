@@ -50,7 +50,7 @@ func validateUpdateDisk(disk *db.Disk, initiator db.Initiator) error {
 }
 
 type etcdDiskManager struct {
-	conn *etcdConeection
+	conn *etcdConnection
 }
 
 func (dm *etcdDiskManager) NewEntity() *db.Disk {
@@ -85,6 +85,10 @@ func (dm *etcdDiskManager) Create(ctx context.Context, disk *db.Disk) error {
 		if img, err = c.Images().Get(ctx, disk.ImageId); err != nil {
 			return err
 		}
+		if img.State != db.StateReady {
+			logger.Error(ctx, "image in invalid state", "image_id", disk.ImageId, "state", img.State)
+			return &fsm.InvalidStateError{State: img.State}
+		}
 	}
 
 	disk.Id = utils.NewULID()
@@ -99,7 +103,7 @@ func (dm *etcdDiskManager) Create(ctx context.Context, disk *db.Disk) error {
 	if img != nil {
 		txn.Update(ctx, img)
 	}
-	createFsmNotification(ctx, txn, disk, fsm.DiskFSM)
+	fsm.DiskFSM.Notify(ctx, txn, disk)
 	return txn.Commit(ctx)
 }
 
@@ -110,16 +114,36 @@ func (dm *etcdDiskManager) Update(ctx context.Context, disk *db.Disk, initiator 
 	c := dm.conn
 	txn := c.NewTransaction()
 	txn.Update(ctx, disk)
-	deleteFsmNotification(ctx, txn, disk.Original, fsm.DiskFSM)
-	createFsmNotification(ctx, txn, disk, fsm.DiskFSM)
+	fsm.DiskFSM.Notify(ctx, txn, disk)
 	return txn.Commit(ctx)
 }
 
-func (dm *etcdDiskManager) Delete(ctx context.Context, id ulid.ULID) error {
+func (dm *etcdDiskManager) IntentDelete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
 	disk, err := dm.Get(ctx, id)
 	if err != nil {
-		return nil
+		return err
 	}
+
+	if err := fsm.DiskFSM.CheckTransition(disk.State, db.StateDeleting, initiator); err != nil {
+		return err
+	}
+	disk.State = db.StateDeleting
+
+	txn := dm.conn.NewTransaction()
+	txn.Update(ctx, disk)
+	fsm.DiskFSM.Notify(ctx, txn, disk)
+	return txn.Commit(ctx)
+}
+
+func (dm *etcdDiskManager) Delete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
+	disk, err := dm.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := fsm.ImageFSM.CheckTransition(disk.State, db.StateDeleted, initiator); err != nil {
+		return err
+	}
+
 	c := dm.conn
 	proj, err := c.Projects().Get(ctx, disk.ProjectId)
 	if err != nil {
@@ -127,8 +151,8 @@ func (dm *etcdDiskManager) Delete(ctx context.Context, id ulid.ULID) error {
 	}
 	proj.DiskIds = utils.RemoveULID(proj.DiskIds, disk.Id)
 
+	var img *db.Image
 	if disk.ImageId != utils.Zero {
-		var img *db.Image
 		if img, err = c.Images().Get(ctx, disk.ImageId); err != nil {
 			return err
 		}
@@ -138,6 +162,9 @@ func (dm *etcdDiskManager) Delete(ctx context.Context, id ulid.ULID) error {
 	txn := c.NewTransaction()
 	txn.Delete(ctx, disk)
 	txn.Update(ctx, proj)
-	deleteFsmNotification(ctx, txn, disk, fsm.DiskFSM)
+	if img != nil {
+		txn.Update(ctx, img)
+	}
+	fsm.DiskFSM.DeleteNotification(ctx, txn, disk)
 	return txn.Commit(ctx)
 }

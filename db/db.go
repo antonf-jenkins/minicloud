@@ -29,6 +29,8 @@ type Initiator int
 const (
 	InitiatorSystem Initiator = 1 << 0
 	InitiatorUser   Initiator = 1 << 1
+	DataPrefix                = "/minicloud/db/data"
+	MetaPrefix                = "/minicloud/db/meta"
 )
 
 type RawValue struct {
@@ -53,12 +55,9 @@ type Transaction interface {
 	Create(ctx context.Context, entity Entity)
 	Update(ctx context.Context, entity Entity)
 	Delete(ctx context.Context, entity Entity)
-	ForceDelete(ctx context.Context, entity string, id ulid.ULID)
-	ClaimUnique(ctx context.Context, entity Entity, spec ...string)
-	ForfeitUnique(ctx context.Context, entity Entity, spec ...string)
-	CreateMeta(ctx context.Context, path []string, content string)
-	DeleteMeta(ctx context.Context, path []string)
-	DeleteMetaContent(ctx context.Context, path []string, content string)
+	CreateMeta(ctx context.Context, key, content string)
+	CheckMeta(ctx context.Context, key, content string)
+	DeleteMeta(ctx context.Context, key string)
 	AcquireLock(ctx context.Context, key string)
 	ReleaseLock(ctx context.Context, key string)
 }
@@ -68,7 +67,8 @@ type ProjectManager interface {
 	Get(ctx context.Context, id ulid.ULID) (*Project, error)
 	Create(ctx context.Context, proj *Project) error
 	Update(ctx context.Context, proj *Project, initiator Initiator) error
-	Delete(ctx context.Context, id ulid.ULID) error
+	IntentDelete(ctx context.Context, id ulid.ULID, initiator Initiator) error
+	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
 }
 
 type ImageManager interface {
@@ -76,7 +76,8 @@ type ImageManager interface {
 	Get(ctx context.Context, id ulid.ULID) (*Image, error)
 	Create(ctx context.Context, img *Image) error
 	Update(ctx context.Context, img *Image, initiator Initiator) error
-	Delete(ctx context.Context, id ulid.ULID) error
+	IntentDelete(ctx context.Context, id ulid.ULID, initiator Initiator) error
+	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
 }
 
 type DiskManager interface {
@@ -84,7 +85,8 @@ type DiskManager interface {
 	Get(ctx context.Context, id ulid.ULID) (*Disk, error)
 	Create(ctx context.Context, disk *Disk) error
 	Update(ctx context.Context, disk *Disk, initiator Initiator) error
-	Delete(ctx context.Context, id ulid.ULID) error
+	IntentDelete(ctx context.Context, id ulid.ULID, initiator Initiator) error
+	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
 }
 
 type Project struct {

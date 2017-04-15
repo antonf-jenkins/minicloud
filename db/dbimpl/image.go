@@ -29,15 +29,6 @@ import (
 
 var (
 	regexpImageName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")
-	imageFSM        = fsm.NewStateMachine().
-			InitialState(db.StateCreated).
-			UserTransition(db.StateCreated, db.StateCreated). // Allow update in created state
-			UserTransition(db.StateReady, db.StateReady).     // Allow update in ready state
-			SystemTransition(db.StateCreated, db.StateUploading).
-			SystemTransition(db.StateUploading, db.StateReady).
-			SystemTransition(db.StateCreated, db.StateError).
-			SystemTransition(db.StateUploading, db.StateError).
-			SystemTransition(db.StateReady, db.StateError)
 )
 
 func validateImage(img *db.Image) error {
@@ -45,13 +36,13 @@ func validateImage(img *db.Image) error {
 		return err
 	}
 	if img.Checksum != "" {
-		return &db.FieldError{"image", "Checksum", "Field is read-only"}
+		return &db.FieldError{Entity: "image", Field: "Checksum", Message: "Field is read-only"}
 	}
-	if err := imageFSM.CheckInitialState(img.State); err != nil {
+	if err := fsm.ImageFSM.CheckInitialState(img.State); err != nil {
 		return err
 	}
 	if len(img.DiskIds) > 0 {
-		return &db.FieldError{"image", "DiskIds", "Should be empty"}
+		return &db.FieldError{Entity: "image", Field: "DiskIds", Message: "Should be empty"}
 	}
 	return nil
 }
@@ -59,12 +50,12 @@ func validateImage(img *db.Image) error {
 func validateUpdateImage(img *db.Image, initiator db.Initiator) error {
 	origImg := img.Original.(*db.Image)
 	if img.Id != origImg.Id {
-		return &db.FieldError{"image", "Id", "Field is read-only"}
+		return &db.FieldError{Entity: "image", Field: "Id", Message: "Field is read-only"}
 	}
 	if img.ProjectId != origImg.ProjectId {
-		return &db.FieldError{"image", "ProjectId", "Field is read-only"}
+		return &db.FieldError{Entity: "image", Field: "ProjectId", Message: "Field is read-only"}
 	}
-	if err := imageFSM.CheckTransition(origImg.State, img.State, initiator); err != nil {
+	if err := fsm.ImageFSM.CheckTransition(origImg.State, img.State, initiator); err != nil {
 		return err
 	}
 	if err := checkFieldRegexp("image", "Name", img.Name, regexpImageName); err != nil {
@@ -72,28 +63,30 @@ func validateUpdateImage(img *db.Image, initiator db.Initiator) error {
 	}
 	if initiator != db.InitiatorSystem {
 		if !reflect.DeepEqual(origImg.DiskIds, img.DiskIds) {
-			return &db.FieldError{"image", "DiskIds", "Field is read-only"}
+			return &db.FieldError{Entity: "image", Field: "DiskIds", Message: "Field is read-only"}
 		}
 		if img.Checksum != origImg.Checksum {
-			return &db.FieldError{"image", "Checksum", "Field is read-only"}
+			return &db.FieldError{Entity: "image", Field: "Checksum", Message: "Field is read-only"}
 		}
 	}
 	return nil
 }
 
 func claimUniqueImageName(ctx context.Context, img *db.Image, txn db.Transaction) {
-	txn.ClaimUnique(ctx, img, "name", img.ProjectId.String(), img.Name)
+	txn.CreateMeta(ctx, uniqueMetaKey(img, "name", img.ProjectId.String(), img.Name), img.Id.String())
 }
 
 func forfeitUniqueImageName(ctx context.Context, img *db.Image, txn db.Transaction) {
-	txn.ForfeitUnique(ctx, img, "name", img.ProjectId.String(), img.Name)
+	key := uniqueMetaKey(img, "name", img.ProjectId.String(), img.Name)
+	txn.CheckMeta(ctx, key, img.Id.String())
+	txn.DeleteMeta(ctx, key)
 }
 
 type etcdImageManager struct {
-	conn *etcdConeection
+	conn *etcdConnection
 }
 
-func (pm *etcdImageManager) NewEntity() *db.Image {
+func (im *etcdImageManager) NewEntity() *db.Image {
 	return &db.Image{
 		EntityHeader: db.EntityHeader{
 			SchemaVersion: 1,
@@ -145,13 +138,36 @@ func (im *etcdImageManager) Update(ctx context.Context, img *db.Image, initiator
 	return txn.Commit(ctx)
 }
 
-func (im *etcdImageManager) Delete(ctx context.Context, id ulid.ULID) error {
+func (im *etcdImageManager) IntentDelete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
 	img, err := im.Get(ctx, id)
 	if err != nil {
-		return nil
+		return err
 	}
 	if len(img.DiskIds) != 0 {
-		return &db.FieldError{"image", "DiskIds", "Can't delete image referenced by disk"}
+		return &db.FieldError{Entity: "image", Field: "DiskIds", Message: "Can't delete image referenced by disk"}
+	}
+
+	if err := fsm.ImageFSM.CheckTransition(img.State, db.StateDeleting, initiator); err != nil {
+		return err
+	}
+	img.State = db.StateDeleting
+
+	txn := im.conn.NewTransaction()
+	forfeitUniqueImageName(ctx, img, txn)
+	txn.Update(ctx, img)
+	return txn.Commit(ctx)
+}
+
+func (im *etcdImageManager) Delete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
+	img, err := im.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if len(img.DiskIds) != 0 {
+		return &db.FieldError{Entity: "image", Field: "DiskIds", Message: "Can't delete image referenced by disk"}
+	}
+	if err := fsm.ImageFSM.CheckTransition(img.State, db.StateDeleted, initiator); err != nil {
+		return err
 	}
 
 	c := im.conn

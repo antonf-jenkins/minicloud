@@ -20,6 +20,7 @@ package fsm
 import (
 	"context"
 	"github.com/antonf/minicloud/db"
+	"github.com/antonf/minicloud/log"
 	"github.com/oklog/ulid"
 	"strings"
 	"sync"
@@ -40,8 +41,9 @@ var (
 	machines = map[string]*StateMachine{
 		"disk": DiskFSM,
 	}
-	prefix = "/minicloud/db/meta/notify-fsm/"
 )
+
+const prefix = db.MetaPrefix + "/notify-fsm/"
 
 func WatchNotifications(ctx context.Context, conn db.Connection) error {
 	notifyCh := conn.RawWatchPrefix(ctx, prefix)
@@ -53,11 +55,11 @@ func WatchNotifications(ctx context.Context, conn db.Connection) error {
 	watcher := &watcher{
 		initial:  notifications,
 		notifyCh: notifyCh,
-		interest: make(map[string]bool),
+		interest: make(map[string]ulid.ULID),
 	}
 	worker := &worker{
 		conn:     conn,
-		workerCh: make(chan string),
+		workerCh: make(chan *job),
 	}
 	go watcher.watch(ctx, worker)
 	go worker.work(ctx)
@@ -68,7 +70,7 @@ type watcher struct {
 	initial  []db.RawValue
 	notifyCh chan *db.RawValue
 	minRev   int64
-	interest map[string]bool
+	interest map[string]ulid.ULID
 }
 
 func (w *watcher) watch(ctx context.Context, wrk *worker) {
@@ -107,16 +109,22 @@ func (w *watcher) handleRawValue(ctx context.Context, wrk *worker, rv *db.RawVal
 			// Lock released
 			logger.Debug(ctx, "released lock", "key", rv.Key)
 			key := rv.Key[:len(rv.Key)-5]
-			if w.interest[key] {
-				wrk.enqueue(key)
+			if notificationId, ok := w.interest[key]; ok {
+				wrk.enqueue(key, notificationId)
 			}
 		}
 	} else {
 		// Handle notification
 		if rv.Data != nil {
 			// Notification added
-			w.interest[rv.Key] = true
-			wrk.enqueue(rv.Key)
+			data := string(rv.Data)
+			notificationId, err := ulid.Parse(data)
+			if err != nil {
+				logger.Error(ctx, "failed to parse notification id", "data", data)
+				return
+			}
+			w.interest[rv.Key] = notificationId
+			wrk.enqueue(rv.Key, notificationId)
 		} else {
 			// Notification removed
 			wrk.remove(rv.Key)
@@ -125,18 +133,23 @@ func (w *watcher) handleRawValue(ctx context.Context, wrk *worker, rv *db.RawVal
 	}
 }
 
+type job struct {
+	id  ulid.ULID
+	key string
+}
+
 type worker struct {
 	sync.Mutex
 	conn     db.Connection
-	unlocked []string
-	workerCh chan string
+	unlocked []*job
+	workerCh chan *job
 }
 
 func (wrk *worker) remove(key string) {
 	wrk.Lock()
 	defer wrk.Unlock()
-	for idx, unlockedKey := range wrk.unlocked {
-		if key == unlockedKey {
+	for idx, unlockedJob := range wrk.unlocked {
+		if key == unlockedJob.key {
 			unlockedLen := len(wrk.unlocked)
 			wrk.unlocked[idx] = wrk.unlocked[unlockedLen-1]
 			wrk.unlocked = wrk.unlocked[:unlockedLen-1]
@@ -145,14 +158,15 @@ func (wrk *worker) remove(key string) {
 	}
 }
 
-func (wrk *worker) enqueue(key string) {
+func (wrk *worker) enqueue(key string, notificationId ulid.ULID) {
+	newJob := &job{id: notificationId, key: key}
 	select {
-	case wrk.workerCh <- key:
+	case wrk.workerCh <- newJob:
 		return
 	default:
 		wrk.Lock()
 		defer wrk.Unlock()
-		wrk.unlocked = append(wrk.unlocked, key)
+		wrk.unlocked = append(wrk.unlocked, newJob)
 	}
 }
 
@@ -160,7 +174,7 @@ func (wrk *worker) work(ctx context.Context) {
 loop:
 	for {
 		// Get next key to work on
-		var key string
+		var job *job
 		wrk.Lock()
 		unlockedLen := len(wrk.unlocked)
 		if unlockedLen > 0 {
@@ -168,7 +182,7 @@ loop:
 			case <-ctx.Done():
 				break loop
 			default:
-				key = wrk.unlocked[unlockedLen-1]
+				job = wrk.unlocked[unlockedLen-1]
 				wrk.unlocked = wrk.unlocked[:unlockedLen-1]
 			}
 		}
@@ -178,43 +192,54 @@ loop:
 			select {
 			case <-ctx.Done():
 				break loop
-			case key = <-wrk.workerCh:
+			case job = <-wrk.workerCh:
 			}
 		}
 
 		// Work on state transfer
-		wrk.processKey(ctx, key)
+		wrk.processJob(log.WithValues(ctx, "notification_id", job.id), job)
 	}
 	logger.Info(ctx, "stopped working on state transitions")
 }
 
-func (wrk *worker) processKey(ctx context.Context, key string) {
+func (wrk *worker) processJob(ctx context.Context, job *job) {
 	// Get entity name and id from key
-	elements := strings.Split(key[len(prefix):], "/")
-	if len(elements) != 2 {
-		logger.Error(ctx, "invalid notification key", "key", key)
+	elements := strings.Split(job.key[len(prefix):], "/")
+	if len(elements) != 3 {
+		logger.Error(ctx, "invalid notification key", "key", job.key)
 		return
 	}
 	entityName := elements[0]
+	state := db.State(elements[2])
 	id, err := ulid.Parse(elements[1])
 	if err != nil {
 		logger.Error(ctx, "failed to parse entity id",
 			"entity", elements[0],
 			"id", elements[1],
+			"state", elements[2],
 			"error", err)
 		return
 	}
 
 	if getter, ok := entityGetters[entityName]; ok {
-		if !wrk.lock(ctx, key) {
+		if !wrk.lock(ctx, job) {
 			return
 		}
-		defer wrk.unlock(ctx, key)
+		defer wrk.unlock(ctx, job)
 		entity, err := getter(ctx, wrk.conn, id)
 		if err != nil {
 			logger.Error(ctx, "failed to get entity",
 				"entity_name", entityName,
 				"id", id,
+				"error", err)
+			return
+		}
+		if entity.Header().State != state {
+			logger.Error(ctx, "entity in invalid state",
+				"entity_name", entityName,
+				"id", id,
+				"state", entity.Header().State,
+				"expected_state", state,
 				"error", err)
 			return
 		}
@@ -227,9 +252,10 @@ func (wrk *worker) processKey(ctx context.Context, key string) {
 }
 
 // acquire lock in etcd
-func (wrk *worker) lock(ctx context.Context, key string) bool {
+func (wrk *worker) lock(ctx context.Context, job *job) bool {
 	tx := wrk.conn.NewTransaction()
-	tx.AcquireLock(ctx, key+"/lock")
+	tx.CheckMeta(ctx, job.key, job.id.String())
+	tx.AcquireLock(ctx, job.key+"/lock")
 	if err := tx.Commit(ctx); err != nil {
 		return false
 	}
@@ -237,10 +263,10 @@ func (wrk *worker) lock(ctx context.Context, key string) bool {
 }
 
 // release lock in etcd, crash process on release failure
-func (wrk *worker) unlock(ctx context.Context, key string) {
+func (wrk *worker) unlock(ctx context.Context, job *job) {
 	tx := wrk.conn.NewTransaction()
-	tx.ReleaseLock(ctx, key+"/lock")
+	tx.ReleaseLock(ctx, job.key+"/lock")
 	if err := tx.Commit(ctx); err != nil {
-		logger.Fatal(ctx, "failed to release lock", "key", key+"/lock")
+		logger.Fatal(ctx, "failed to release lock", "key", job.key+"/lock")
 	}
 }

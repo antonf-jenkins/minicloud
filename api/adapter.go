@@ -26,6 +26,8 @@ import (
 	"reflect"
 )
 
+var reflectedInitiatorUser = reflect.ValueOf(db.InitiatorUser)
+
 type managerHandlers struct {
 	newRv    reflect.Value
 	listRv   reflect.Value
@@ -55,12 +57,12 @@ func (mh *managerHandlers) create(ctx context.Context, entity reflect.Value) err
 }
 
 func (mh *managerHandlers) update(ctx context.Context, entity reflect.Value) error {
-	result := mh.putRv.Call([]reflect.Value{reflect.ValueOf(ctx), entity, reflect.ValueOf(db.InitiatorUser)})
+	result := mh.putRv.Call([]reflect.Value{reflect.ValueOf(ctx), entity, reflectedInitiatorUser})
 	return toError(result[0])
 }
 
 func (mh *managerHandlers) delete(ctx context.Context, id ulid.ULID) error {
-	result := mh.deleteRv.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(id)})
+	result := mh.deleteRv.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(id), reflectedInitiatorUser})
 	return toError(result[0])
 }
 
@@ -73,7 +75,7 @@ func adaptManager(manager interface{}) *managerHandlers {
 		getRv:    managerRv.MethodByName("Get"),
 		postRv:   managerRv.MethodByName("Create"),
 		putRv:    managerRv.MethodByName("Update"),
-		deleteRv: managerRv.MethodByName("Delete"),
+		deleteRv: managerRv.MethodByName("IntentDelete"),
 	}
 }
 

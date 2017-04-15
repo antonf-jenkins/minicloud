@@ -25,4 +25,6 @@ const (
 	StateReady     State = "ready"
 	StateUpdated   State = "updated"
 	StateInUse     State = "in-use"
+	StateDeleting  State = "deleting"
+	StateDeleted   State = "deleted"
 )

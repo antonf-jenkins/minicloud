@@ -21,19 +21,26 @@ import (
 	"context"
 	"github.com/antonf/minicloud/config"
 	"github.com/antonf/minicloud/db"
+	"github.com/antonf/minicloud/log"
 )
 
-func Retry(ctx context.Context, operationFn func() error) (err error) {
+func Retry(ctx context.Context, operationFn func(ctx context.Context) error) (err error) {
 	retryCount := config.OptRetryCount.Value()
 	for i := 0; i < retryCount; i++ {
-		if err = operationFn(); err != nil {
+		select {
+		case <-ctx.Done():
+			return ErrInterrupted
+		default:
+		}
+		attemptCtx := log.WithValues(ctx, "attempt", i)
+		if err = operationFn(attemptCtx); err != nil {
 			if _, ok := err.(*db.ConflictError); ok {
-				logger.Error(ctx, "operation failed, trying again", "error", err, "attempt", i)
+				logger.Error(attemptCtx, "conflict, trying again", "error", err)
 				continue
 			}
-		} else {
-			return
+			logger.Error(attemptCtx, "operation failed, can't retry", "error", err)
 		}
+		return
 	}
 	return
 }

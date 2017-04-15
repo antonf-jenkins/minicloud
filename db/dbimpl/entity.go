@@ -22,34 +22,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/antonf/minicloud/db"
-	"github.com/antonf/minicloud/fsm"
 	"github.com/antonf/minicloud/log"
 	"github.com/antonf/minicloud/utils"
 	backend "github.com/coreos/etcd/clientv3"
-	"reflect"
 	"regexp"
 	"strings"
 )
 
-const (
-	MetaPrefix = "/minicloud/db/meta"
-	DataPrefix = "/minicloud/db/data"
-)
-
-func GetEntityName(entity db.Entity) string {
-	ty := reflect.TypeOf(entity)
-	if ty.Kind() == reflect.Ptr {
-		ty = ty.Elem()
-	}
-	return strings.ToLower(ty.Name())
-}
-
 func dataKey(entity db.Entity) string {
-	return fmt.Sprintf("%s/%s/%s", DataPrefix, GetEntityName(entity), entity.Header().Id)
+	return fmt.Sprintf("%s/%s/%s", db.DataPrefix, db.GetEntityName(entity), entity.Header().Id)
 }
 
-func (c *etcdConeection) loadEntity(ctx context.Context, entity db.Entity) error {
-	entityName := GetEntityName(entity)
+func (c *etcdConnection) loadEntity(ctx context.Context, entity db.Entity) error {
+	entityName := db.GetEntityName(entity)
 	entityId := entity.Header().Id
 	key := dataKey(entity)
 	opCtx := log.WithValues(ctx, "entity", entity, "key", key)
@@ -62,7 +47,7 @@ func (c *etcdConeection) loadEntity(ctx context.Context, entity db.Entity) error
 	}
 	if resp.Count == 0 {
 		logger.Info(opCtx, "entity not found")
-		return &db.NotFoundError{entityName, entityId}
+		return &db.NotFoundError{Entity: entityName, Id: entityId}
 	}
 	kv := resp.Kvs[0]
 	if err = json.Unmarshal(kv.Value, entity); err != nil {
@@ -76,24 +61,6 @@ func (c *etcdConeection) loadEntity(ctx context.Context, entity db.Entity) error
 	return nil
 }
 
-func createFsmNotification(ctx context.Context, tx db.Transaction, entity db.Entity, fsm *fsm.StateMachine) {
-	state := entity.Header().State
-	entityId := entity.Header().Id.String()
-	entityName := GetEntityName(entity)
-	if fsm.NeedNotify(state) {
-		tx.CreateMeta(ctx, []string{"notify-fsm", entityName, entityId}, entityId)
-	}
-}
-
-func deleteFsmNotification(ctx context.Context, tx db.Transaction, entity db.Entity, fsm *fsm.StateMachine) {
-	state := entity.Header().State
-	entityId := entity.Header().Id.String()
-	entityName := GetEntityName(entity)
-	if fsm.NeedNotify(state) {
-		tx.DeleteMeta(ctx, []string{"notify-fsm", entityName, entityId})
-	}
-}
-
 func checkFieldRegexp(entity, field, value string, regexp *regexp.Regexp) error {
 	if !regexp.MatchString(value) {
 		return &db.FieldError{
@@ -103,4 +70,8 @@ func checkFieldRegexp(entity, field, value string, regexp *regexp.Regexp) error 
 		}
 	}
 	return nil
+}
+
+func uniqueMetaKey(entity db.Entity, spec ...string) string {
+	return fmt.Sprintf("%s/%s/%s", db.MetaPrefix, db.GetEntityName(entity), strings.Join(spec, "/"))
 }

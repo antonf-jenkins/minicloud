@@ -33,10 +33,10 @@ func validateProject(p *db.Project) error {
 		return err
 	}
 	if len(p.ImageIds) > 0 {
-		return &db.FieldError{"project", "ImageIds", "Should be empty"}
+		return &db.FieldError{Entity: "project", Field: "ImageIds", Message: "Should be empty"}
 	}
 	if len(p.DiskIds) > 0 {
-		return &db.FieldError{"project", "DiskIds", "Should be empty"}
+		return &db.FieldError{Entity: "project", Field: "DiskIds", Message: "Should be empty"}
 	}
 	return nil
 }
@@ -47,29 +47,31 @@ func validateUpdateProject(p *db.Project, initiator db.Initiator) error {
 	}
 	origVal := p.Original.(*db.Project)
 	if p.Id != origVal.Id {
-		return &db.FieldError{"project", "Id", "Field is read-only"}
+		return &db.FieldError{Entity: "project", Field: "Id", Message: "Field is read-only"}
 	}
 	if initiator != db.InitiatorSystem {
 		if !reflect.DeepEqual(origVal.ImageIds, p.ImageIds) {
-			return &db.FieldError{"project", "ImageIds", "Field is read-only"}
+			return &db.FieldError{Entity: "project", Field: "ImageIds", Message: "Field is read-only"}
 		}
 		if !reflect.DeepEqual(origVal.DiskIds, p.DiskIds) {
-			return &db.FieldError{"project", "DiskIds", "Field is read-only"}
+			return &db.FieldError{Entity: "project", Field: "DiskIds", Message: "Field is read-only"}
 		}
 	}
 	return nil
 }
 
 func claimUniqueProjectName(ctx context.Context, p *db.Project, txn db.Transaction) {
-	txn.ClaimUnique(ctx, p, "name", p.Name)
+	txn.CreateMeta(ctx, uniqueMetaKey(p, "name", p.Name), p.Id.String())
 }
 
 func forfeitUniqueProjectName(ctx context.Context, p *db.Project, txn db.Transaction) {
-	txn.ForfeitUnique(ctx, p, "name", p.Name)
+	key := uniqueMetaKey(p, "name", p.Name)
+	txn.CheckMeta(ctx, key, p.Id.String())
+	txn.DeleteMeta(ctx, key)
 }
 
 type etcdProjectManager struct {
-	conn *etcdConeection
+	conn *etcdConnection
 }
 
 func (pm *etcdProjectManager) NewEntity() *db.Project {
@@ -113,16 +115,20 @@ func (pm *etcdProjectManager) Update(ctx context.Context, proj *db.Project, init
 	return txn.Commit(ctx)
 }
 
-func (pm *etcdProjectManager) Delete(ctx context.Context, id ulid.ULID) error {
+func (pm *etcdProjectManager) IntentDelete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
+	return pm.Delete(ctx, id, initiator)
+}
+
+func (pm *etcdProjectManager) Delete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
 	proj, err := pm.Get(ctx, id)
 	if err != nil {
-		return nil
+		return err
 	}
 	if len(proj.ImageIds) != 0 {
-		return &db.FieldError{"project", "ImageIds", "Can't delete non-empty project"}
+		return &db.FieldError{Entity: "project", Field: "ImageIds", Message: "Can't delete non-empty project"}
 	}
 	if len(proj.DiskIds) != 0 {
-		return &db.FieldError{"project", "DiskIds", "Can't delete non-empty project"}
+		return &db.FieldError{Entity: "project", Field: "DiskIds", Message: "Can't delete non-empty project"}
 	}
 	c := pm.conn
 	txn := c.NewTransaction()

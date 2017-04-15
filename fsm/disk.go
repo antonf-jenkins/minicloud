@@ -27,6 +27,8 @@ import (
 var DiskFSM = NewStateMachine().
 	InitialState(db.StateCreated).
 	UserTransition(db.StateReady, db.StateUpdated).
+	UserTransition(db.StateReady, db.StateDeleting).
+	UserTransition(db.StateError, db.StateDeleting).
 	SystemTransition(db.StateCreated, db.StateReady).
 	SystemTransition(db.StateUpdated, db.StateReady).
 	SystemTransition(db.StateInUse, db.StateReady).
@@ -36,7 +38,8 @@ var DiskFSM = NewStateMachine().
 	SystemTransition(db.StateUpdated, db.StateError).
 	SystemTransition(db.StateInUse, db.StateError).
 	Hook(db.StateCreated, HandleDiskCreated).
-	Hook(db.StateUpdated, HandleDiskUpdated)
+	Hook(db.StateUpdated, HandleDiskUpdated).
+	Hook(db.StateDeleting, HandleDiskDeleting)
 
 func HandleDiskCreated(ctx context.Context, conn db.Connection, entity db.Entity) {
 	disk := entity.(*db.Disk)
@@ -67,5 +70,31 @@ func HandleDiskUpdated(ctx context.Context, conn db.Connection, entity db.Entity
 	}
 	if err := conn.Disks().Update(ctx, disk, db.InitiatorSystem); err != nil {
 		logger.Error(ctx, "failed to change disk state state", "id", disk.Id, "state", disk.State, "error", err)
+	}
+}
+
+func HandleDiskDeleting(ctx context.Context, conn db.Connection, entity db.Entity) {
+	disk := entity.(*db.Disk)
+	if err := ceph.DeleteDisk(ctx, disk.Pool, disk.Id.String()); err != nil {
+		logger.Debug(ctx, "setting disk state to error", "id", disk.Id, "cause", err)
+		utils.Retry(ctx, func(ctx context.Context) error {
+			disk, err := conn.Disks().Get(ctx, disk.Id)
+			if err != nil {
+				return err
+			}
+			disk.State = db.StateError
+			if err := conn.Disks().Update(ctx, disk, db.InitiatorSystem); err != nil {
+				logger.Error(ctx, "failed to change disk state", "id", disk.Id, "state", disk.State, "error", err)
+				return err
+			}
+			return nil
+		})
+		return
+	}
+	err := utils.Retry(ctx, func(ctx context.Context) error {
+		return conn.Disks().Delete(ctx, disk.Id, db.InitiatorSystem)
+	})
+	if err != nil {
+		logger.Error(ctx, "failed to delete disk from database", "id", disk.Id, "error", err)
 	}
 }

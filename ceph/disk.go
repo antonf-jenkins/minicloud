@@ -121,3 +121,27 @@ func ResizeDisk(ctx context.Context, pool, name string, size uint64) error {
 	logger.Info(opCtx, "disk resized")
 	return nil
 }
+
+func DeleteDisk(ctx context.Context, pool, name string) error {
+	opCtx := log.WithValues(ctx, "pool", pool, "name", name)
+
+	// Create connection; defer shutdown
+	conn, err := NewConnection(ctx, pool)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	disk := rbd.GetImage(conn.ioctx[pool], name)
+	if err = disk.Remove(); err != nil && err != rbd.RbdErrorNotFound {
+		logger.Error(opCtx, "failed to delete disk", "error", err)
+		return err
+	}
+
+	if err == rbd.RbdErrorNotFound {
+		logger.Info(opCtx, "disk didn't exist")
+	} else {
+		logger.Info(opCtx, "disk removed")
+	}
+	return nil
+}

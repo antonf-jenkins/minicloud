@@ -67,7 +67,7 @@ func UploadImage(ctx context.Context, conn db.Connection, w http.ResponseWriter,
 	content := io.TeeReader(req.Body, md5hash)
 	contentLength := uint64(req.ContentLength)
 	if err := ceph.CreateImageWithContent(ctx, "images", image.Id.String(), contentLength, content); err != nil {
-		utils.Retry(ctx, func() error {
+		utils.Retry(ctx, func(ctx context.Context) error {
 			return setImageStateError(ctx, conn, id)
 		})
 		writeError(w, err)
@@ -75,7 +75,7 @@ func UploadImage(ctx context.Context, conn db.Connection, w http.ResponseWriter,
 	}
 
 	// Update image state
-	if err := utils.Retry(ctx, func() error {
+	if err := utils.Retry(ctx, func(ctx context.Context) error {
 		image, err := conn.Images().Get(ctx, id)
 		if err != nil {
 			return err
@@ -87,7 +87,7 @@ func UploadImage(ctx context.Context, conn db.Connection, w http.ResponseWriter,
 		}
 		return nil
 	}); err != nil {
-		utils.Retry(ctx, func() error {
+		utils.Retry(ctx, func(ctx context.Context) error {
 			return setImageStateError(ctx, conn, id)
 		})
 		writeError(w, err)

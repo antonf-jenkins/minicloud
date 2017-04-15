@@ -20,16 +20,13 @@ package dbimpl
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/antonf/minicloud/db"
 	"github.com/antonf/minicloud/utils"
 	backend "github.com/coreos/etcd/clientv3"
-	"github.com/oklog/ulid"
 	"strconv"
-	"strings"
 )
 
-func (c *etcdConeection) NewTransaction() db.Transaction {
+func (c *etcdConnection) NewTransaction() db.Transaction {
 	return &etcdTransaction{
 		xid:  utils.NewULID().String(),
 		conn: c,
@@ -39,7 +36,7 @@ func (c *etcdConeection) NewTransaction() db.Transaction {
 type etcdTransaction struct {
 	xid  string
 	err  error
-	conn *etcdConeection
+	conn *etcdConnection
 	cmps []backend.Cmp
 	ops  []backend.Op
 }
@@ -65,7 +62,7 @@ func (t *etcdTransaction) Commit(ctx context.Context) error {
 		return err
 	}
 	if !resp.Succeeded {
-		return &db.ConflictError{t.xid}
+		return &db.ConflictError{Xid: t.xid}
 	}
 	return nil
 }
@@ -113,70 +110,29 @@ func (t *etcdTransaction) Delete(ctx context.Context, entity db.Entity) {
 	t.addOp(backend.OpDelete(key))
 }
 
-func (t *etcdTransaction) ForceDelete(ctx context.Context, entityName string, id ulid.ULID) {
+func (t *etcdTransaction) CreateMeta(ctx context.Context, key string, content string) {
 	if t.err != nil {
 		return
 	}
-	logger.Debug(ctx, "force deleting entity", "xid", t.xid, "entity_name", entityName, "id", id)
-	key := fmt.Sprintf("%s/%s/%s", DataPrefix, entityName, id)
-	t.addOp(backend.OpDelete(key))
-}
-
-func metaKey(name string, spec []string) string {
-	return fmt.Sprintf("%s/%s/%s", MetaPrefix, name, strings.Join(spec, "/"))
-}
-
-func (t *etcdTransaction) ClaimUnique(ctx context.Context, entity db.Entity, spec ...string) {
-	if t.err != nil {
-		return
-	}
-	entityName := GetEntityName(entity)
-	key := metaKey(entityName, spec)
-	logger.Debug(ctx, "claim unique", "entity_name", entityName, "spec", spec, "xid", t.xid)
-	entityId := entity.Header().Id.String()
-	t.addCmp(backend.Version(key), "=", 0)
-	t.addOp(backend.OpPut(key, entityId))
-}
-
-func (t *etcdTransaction) ForfeitUnique(ctx context.Context, entity db.Entity, spec ...string) {
-	if t.err != nil {
-		return
-	}
-	entityName := GetEntityName(entity)
-	key := metaKey(entityName, spec)
-	logger.Debug(ctx, "forfeit unique", "entity_name", entityName, "spec", spec, "xid", t.xid)
-	entityId := entity.Header().Id.String()
-	t.addCmp(backend.Value(key), "=", entityId)
-	t.addOp(backend.OpDelete(key))
-}
-
-func (t *etcdTransaction) CreateMeta(ctx context.Context, path []string, content string) {
-	if t.err != nil {
-		return
-	}
-	key := MetaPrefix + "/" + strings.Join(path, "/")
-	logger.Debug(ctx, "create meta", "path", path, "content", content, "xid", t.xid)
+	logger.Debug(ctx, "create meta", "key", key, "content", content, "xid", t.xid)
 	t.addCmp(backend.Version(key), "=", 0)
 	t.addOp(backend.OpPut(key, content))
 }
 
-func (t *etcdTransaction) DeleteMeta(ctx context.Context, path []string) {
+func (t *etcdTransaction) DeleteMeta(ctx context.Context, key string) {
 	if t.err != nil {
 		return
 	}
-	key := MetaPrefix + "/" + strings.Join(path, "/")
-	logger.Debug(ctx, "delete meta", "path", path, "xid", t.xid)
+	logger.Debug(ctx, "delete meta", "key", key, "xid", t.xid)
 	t.addOp(backend.OpDelete(key))
 }
 
-func (t *etcdTransaction) DeleteMetaContent(ctx context.Context, path []string, content string) {
+func (t *etcdTransaction) CheckMeta(ctx context.Context, key, content string) {
 	if t.err != nil {
 		return
 	}
-	key := MetaPrefix + "/" + strings.Join(path, "/")
-	logger.Debug(ctx, "check content and delete meta", "path", path, "content", content, "xid", t.xid)
+	logger.Debug(ctx, "check meta content", "key", key, "content", content, "xid", t.xid)
 	t.addCmp(backend.Value(key), "=", content)
-	t.addOp(backend.OpDelete(key))
 }
 
 func (t *etcdTransaction) AcquireLock(ctx context.Context, key string) {

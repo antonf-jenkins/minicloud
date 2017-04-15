@@ -28,7 +28,7 @@ import (
 	"time"
 )
 
-type etcdConeection struct {
+type etcdConnection struct {
 	client         *backend.Client
 	leaseId        backend.LeaseID
 	projectManager *etcdProjectManager
@@ -36,19 +36,19 @@ type etcdConeection struct {
 	diskManager    *etcdDiskManager
 }
 
-func (c *etcdConeection) Projects() db.ProjectManager {
+func (c *etcdConnection) Projects() db.ProjectManager {
 	return c.projectManager
 }
 
-func (c *etcdConeection) Images() db.ImageManager {
+func (c *etcdConnection) Images() db.ImageManager {
 	return c.imageManager
 }
 
-func (c *etcdConeection) Disks() db.DiskManager {
+func (c *etcdConnection) Disks() db.DiskManager {
 	return c.diskManager
 }
 
-func (c *etcdConeection) RawRead(ctx context.Context, key string) (*db.RawValue, error) {
+func (c *etcdConnection) RawRead(ctx context.Context, key string) (*db.RawValue, error) {
 	resp, err := c.client.Get(ctx, key, backend.WithSerializable())
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func (c *etcdConeection) RawRead(ctx context.Context, key string) (*db.RawValue,
 	return result, nil
 }
 
-func (c *etcdConeection) RawReadPrefix(ctx context.Context, key string) ([]db.RawValue, error) {
+func (c *etcdConnection) RawReadPrefix(ctx context.Context, key string) ([]db.RawValue, error) {
 	resp, err := c.client.Get(ctx, key, backend.WithSerializable(), backend.WithPrefix())
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func (c *etcdConeection) RawReadPrefix(ctx context.Context, key string) ([]db.Ra
 	return result, nil
 }
 
-func (c *etcdConeection) RawWatchPrefix(ctx context.Context, prefix string) chan *db.RawValue {
+func (c *etcdConnection) RawWatchPrefix(ctx context.Context, prefix string) chan *db.RawValue {
 	respCh := c.client.Watch(ctx, prefix, backend.WithPrefix())
 	resultCh := make(chan *db.RawValue)
 	go func() {
@@ -139,7 +139,7 @@ func NewConnection(ctx context.Context, leaseTTL int64) (db.Connection, error) {
 	<-keepAliveCh
 
 	logger.Info(opCtx, "connected to etcd cluster", "lease_ttl", leaseResp.TTL)
-	conn := &etcdConeection{client: cli, leaseId: leaseResp.ID}
+	conn := &etcdConnection{client: cli, leaseId: leaseResp.ID}
 	conn.projectManager = &etcdProjectManager{conn}
 	conn.imageManager = &etcdImageManager{conn}
 	conn.diskManager = &etcdDiskManager{conn}

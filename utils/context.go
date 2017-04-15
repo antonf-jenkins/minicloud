@@ -47,7 +47,7 @@ func WrapContext(ctx context.Context, operation func() (interface{}, error)) (in
 		return nil, ErrInterrupted
 	case r := <-ch:
 		if r.panic != nil {
-			panic(r)
+			panic(r.panic)
 		}
 		return r.val, r.err
 	}
