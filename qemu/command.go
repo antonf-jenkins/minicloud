@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 )
 
 const (
@@ -125,7 +126,7 @@ func (vm *VirtualMachine) prepareCommand(ctx context.Context) (err error) {
 	if vm.VhostNet {
 		vhost = "on"
 	}
-	for idx, netdev := range vm.Nics {
+	for idx, netdev := range vm.NICs {
 		var tapFd int
 		tapFd, err = vm.createTap(ctx, netdev)
 		if err != nil {
@@ -145,6 +146,9 @@ func (vm *VirtualMachine) prepareCommand(ctx context.Context) (err error) {
 			"virtio-net-pci,netdev=nic%d,id=virtionet%d,mac=%s",
 			idx, idx, netdev.MacAddress))
 	}
+
+	vm.appendArgs("-memory", strconv.Itoa(vm.RAM))
+	vm.appendArgs("-smp", strconv.Itoa(vm.NumCPUs))
 
 	vm.appendVnc()
 

@@ -33,6 +33,39 @@ func dataKey(entity db.Entity) string {
 	return fmt.Sprintf("%s/%s/%s", db.DataPrefix, db.GetEntityName(entity), entity.Header().Id)
 }
 
+func buildEntity(ctx context.Context, entity db.Entity, data []byte, createRev, modifyRev int64) error {
+	if err := json.Unmarshal(data, entity); err != nil {
+		logger.Error(ctx, "unmarshal failed", "option", "error", err, "data", string(data))
+		return err
+	}
+	hdr := entity.Header()
+	hdr.CreateRev = createRev
+	hdr.ModifyRev = modifyRev
+	hdr.Original = utils.MakeStructCopy(entity).(db.Entity)
+	return nil
+}
+
+func (c *etcdConnection) listEntities(ctx context.Context, entityName string, createFn func() db.Entity) ([]db.Entity, error) {
+	opCtx := log.WithValues(ctx, "entity_name", entityName)
+	prefix := fmt.Sprintf("%s/%s/", db.DataPrefix, entityName)
+
+	logger.Debug(opCtx, "loading entity list")
+	resp, err := c.client.Get(opCtx, prefix, backend.WithSerializable(), backend.WithPrefix())
+	if err != nil {
+		logger.Error(opCtx, "etcd get failed", "error", err)
+		return nil, err
+	}
+	result := make([]db.Entity, resp.Count)
+	for index, kv := range resp.Kvs {
+		entity := createFn()
+		if err := buildEntity(opCtx, entity, kv.Value, kv.CreateRevision, kv.ModRevision); err != nil {
+			return nil, err
+		}
+		result[index] = entity
+	}
+	return result, nil
+}
+
 func (c *etcdConnection) loadEntity(ctx context.Context, entity db.Entity) error {
 	entityName := db.GetEntityName(entity)
 	entityId := entity.Header().Id
@@ -50,15 +83,7 @@ func (c *etcdConnection) loadEntity(ctx context.Context, entity db.Entity) error
 		return &db.NotFoundError{Entity: entityName, Id: entityId}
 	}
 	kv := resp.Kvs[0]
-	if err = json.Unmarshal(kv.Value, entity); err != nil {
-		logger.Error(ctx, "unmarshal failed", "option", "error", err, "data", string(kv.Value))
-		return err
-	}
-	hdr := entity.Header()
-	hdr.CreateRev = kv.CreateRevision
-	hdr.ModifyRev = kv.ModRevision
-	hdr.Original = utils.MakeStructCopy(entity).(db.Entity)
-	return nil
+	return buildEntity(opCtx, entity, kv.Value, kv.CreateRevision, kv.ModRevision)
 }
 
 func checkFieldRegexp(entity, field, value string, regexp *regexp.Regexp) error {

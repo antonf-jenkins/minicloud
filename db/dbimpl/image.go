@@ -28,7 +28,7 @@ import (
 )
 
 var (
-	regexpImageName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")
+	regexpImageName = regexp.MustCompile("^[a-zA-Z0-9_.:-]{3,}$")
 )
 
 func validateImage(img *db.Image) error {

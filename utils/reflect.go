@@ -41,9 +41,13 @@ func DeepCopy(src, dst reflect.Value) {
 	case reflect.Ptr:
 		DeepCopy(src.Elem(), dst.Elem())
 	case reflect.Slice:
-		dst.Set(reflect.MakeSlice(src.Type(), src.Len(), src.Len()))
-		for i := 0; i < src.Len(); i++ {
-			DeepCopy(src.Index(i), dst.Index(i))
+		if src.IsNil() {
+			dst.Set(reflect.Zero(src.Type()))
+		} else {
+			dst.Set(reflect.MakeSlice(src.Type(), src.Len(), src.Len()))
+			for i := 0; i < src.Len(); i++ {
+				DeepCopy(src.Index(i), dst.Index(i))
+			}
 		}
 	default:
 		if src.CanSet() {

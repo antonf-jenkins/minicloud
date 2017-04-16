@@ -26,17 +26,24 @@ import (
 	"regexp"
 )
 
-var regexpProjectName = regexp.MustCompile("[a-zA-Z0-9_.:-]{3,}")
+var regexpProjectName = regexp.MustCompile("^[a-zA-Z0-9_.:-]{3,}$")
+
+func validateProjectEmpty(p *db.Project, message string) error {
+	if len(p.ImageIds) > 0 {
+		return &db.FieldError{Entity: "project", Field: "ImageIds", Message: message}
+	}
+	if len(p.DiskIds) > 0 {
+		return &db.FieldError{Entity: "project", Field: "DiskIds", Message: message}
+	}
+	return nil
+}
 
 func validateProject(p *db.Project) error {
 	if err := checkFieldRegexp("project", "Name", p.Name, regexpProjectName); err != nil {
 		return err
 	}
-	if len(p.ImageIds) > 0 {
-		return &db.FieldError{Entity: "project", Field: "ImageIds", Message: "Should be empty"}
-	}
-	if len(p.DiskIds) > 0 {
-		return &db.FieldError{Entity: "project", Field: "DiskIds", Message: "Should be empty"}
+	if err := validateProjectEmpty(p, "Should be empty"); err != nil {
+		return err
 	}
 	return nil
 }
@@ -92,9 +99,8 @@ func (pm *etcdProjectManager) Create(ctx context.Context, proj *db.Project) erro
 	if err := validateProject(proj); err != nil {
 		return err
 	}
-	c := pm.conn
 	proj.Id = utils.NewULID()
-	txn := c.NewTransaction()
+	txn := pm.conn.NewTransaction()
 	txn.Create(ctx, proj)
 	claimUniqueProjectName(ctx, proj, txn)
 	return txn.Commit(ctx)
@@ -104,9 +110,8 @@ func (pm *etcdProjectManager) Update(ctx context.Context, proj *db.Project, init
 	if err := validateUpdateProject(proj, initiator); err != nil {
 		return err
 	}
-	c := pm.conn
 	origProj := proj.Original.(*db.Project)
-	txn := c.NewTransaction()
+	txn := pm.conn.NewTransaction()
 	txn.Update(ctx, proj)
 	if origProj.Name != proj.Name {
 		forfeitUniqueProjectName(ctx, origProj, txn)
@@ -116,22 +121,14 @@ func (pm *etcdProjectManager) Update(ctx context.Context, proj *db.Project, init
 }
 
 func (pm *etcdProjectManager) IntentDelete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
-	return pm.Delete(ctx, id, initiator)
-}
-
-func (pm *etcdProjectManager) Delete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
 	proj, err := pm.Get(ctx, id)
 	if err != nil {
 		return err
 	}
-	if len(proj.ImageIds) != 0 {
-		return &db.FieldError{Entity: "project", Field: "ImageIds", Message: "Can't delete non-empty project"}
+	if err := validateProjectEmpty(proj, "Can't delete non-empty project"); err != nil {
+		return err
 	}
-	if len(proj.DiskIds) != 0 {
-		return &db.FieldError{Entity: "project", Field: "DiskIds", Message: "Can't delete non-empty project"}
-	}
-	c := pm.conn
-	txn := c.NewTransaction()
+	txn := pm.conn.NewTransaction()
 	forfeitUniqueProjectName(ctx, proj, txn)
 	txn.Delete(ctx, proj)
 	return txn.Commit(ctx)

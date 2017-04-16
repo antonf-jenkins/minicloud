@@ -48,6 +48,7 @@ type Connection interface {
 	Projects() ProjectManager
 	Images() ImageManager
 	Disks() DiskManager
+	Flavors() FlavorManager
 }
 
 type Transaction interface {
@@ -68,7 +69,6 @@ type ProjectManager interface {
 	Create(ctx context.Context, proj *Project) error
 	Update(ctx context.Context, proj *Project, initiator Initiator) error
 	IntentDelete(ctx context.Context, id ulid.ULID, initiator Initiator) error
-	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
 }
 
 type ImageManager interface {
@@ -89,6 +89,15 @@ type DiskManager interface {
 	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
 }
 
+type FlavorManager interface {
+	NewEntity() *Flavor
+	List(ctx context.Context) ([]*Flavor, error)
+	Get(ctx context.Context, id ulid.ULID) (*Flavor, error)
+	Create(ctx context.Context, flavor *Flavor) error
+	Update(ctx context.Context, flavor *Flavor, initiator Initiator) error
+	IntentDelete(ctx context.Context, id ulid.ULID, initiator Initiator) error
+}
+
 type Project struct {
 	EntityHeader
 	Name     string
@@ -98,7 +107,7 @@ type Project struct {
 
 func (p Project) String() string {
 	return fmt.Sprintf(
-		"Project{Id:%s Name:%s [%d,%d,%d]}",
+		"Project{Id:%s Name:%s [sv=%d cr=%d mr=%d]}",
 		p.Id, p.Name, p.SchemaVersion, p.CreateRev, p.ModifyRev)
 }
 
@@ -112,7 +121,7 @@ type Image struct {
 
 func (img *Image) String() string {
 	return fmt.Sprintf(
-		"Image{Id:%s Name:%s [%d,%d,%d]}",
+		"Image{Id:%s Name:%s [sv=%d cr=%d mr=%d]}",
 		img.Id, img.Name, img.SchemaVersion, img.CreateRev, img.ModifyRev)
 }
 
@@ -127,6 +136,21 @@ type Disk struct {
 
 func (disk *Disk) String() string {
 	return fmt.Sprintf(
-		"Disk{Id:%s [%d,%d,%d]}",
+		"Disk{Id:%s [sv=%d cr=%d mr=%d]}",
 		disk.Id, disk.SchemaVersion, disk.CreateRev, disk.ModifyRev)
+}
+
+type Flavor struct {
+	EntityHeader
+	Name       string
+	NumCPUs    int
+	RAM        int
+	MachineIds []ulid.ULID
+}
+
+func (flavor *Flavor) String() string {
+	return fmt.Sprintf(
+		"Flavor{Id:%s Name:%s NumCPUs:%d RAM:%dMb [sv=%d cr=%d mr=%d]}",
+		flavor.Id, flavor.Name, flavor.NumCPUs, flavor.RAM,
+		flavor.SchemaVersion, flavor.CreateRev, flavor.ModifyRev)
 }

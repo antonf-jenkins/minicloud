@@ -15,17 +15,15 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package db
+package fsm
 
-const (
-	StateNone           State = ""
-	StateError          State = "error"
-	StateCreated        State = "created"
-	StateUploading      State = "uploading"
-	StateReady          State = "ready"
-	StateUpdated        State = "updated"
-	StateInUse          State = "in-use"
-	StateDeleting       State = "deleting"
-	StateDeleted        State = "deleted"
-	StateDecommissioned State = "decommissioned"
-)
+import "github.com/antonf/minicloud/db"
+
+var FlavorFSM = NewStateMachine().
+	InitialState(db.StateReady).
+	UserTransition(db.StateReady, db.StateReady).                   // Allow update in ready state
+	UserTransition(db.StateDecommissioned, db.StateDecommissioned). // Allow update in decommissioned state
+	UserTransition(db.StateReady, db.StateDecommissioned).
+	UserTransition(db.StateDecommissioned, db.StateReady).
+	UserTransition(db.StateReady, db.StateDeleted).
+	UserTransition(db.StateDecommissioned, db.StateDeleted)

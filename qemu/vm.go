@@ -49,10 +49,12 @@ type VirtualMachine struct {
 	VncPort  int
 	Cpu      string
 	Root     string
-	Nics     []NetworkDevice
+	NICs     []NetworkDevice
 	Disks    []StorageDevice
 	MemLock  bool
 	VhostNet bool
+	RAM      int
+	NumCPUs  int
 
 	cmd   *exec.Cmd
 	files []*os.File

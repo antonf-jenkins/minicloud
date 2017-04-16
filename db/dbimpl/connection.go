@@ -34,6 +34,7 @@ type etcdConnection struct {
 	projectManager *etcdProjectManager
 	imageManager   *etcdImageManager
 	diskManager    *etcdDiskManager
+	flavorManager  *etcdFlavorManager
 }
 
 func (c *etcdConnection) Projects() db.ProjectManager {
@@ -46,6 +47,10 @@ func (c *etcdConnection) Images() db.ImageManager {
 
 func (c *etcdConnection) Disks() db.DiskManager {
 	return c.diskManager
+}
+
+func (c *etcdConnection) Flavors() db.FlavorManager {
+	return c.flavorManager
 }
 
 func (c *etcdConnection) RawRead(ctx context.Context, key string) (*db.RawValue, error) {
@@ -140,8 +145,9 @@ func NewConnection(ctx context.Context, leaseTTL int64) (db.Connection, error) {
 
 	logger.Info(opCtx, "connected to etcd cluster", "lease_ttl", leaseResp.TTL)
 	conn := &etcdConnection{client: cli, leaseId: leaseResp.ID}
-	conn.projectManager = &etcdProjectManager{conn}
-	conn.imageManager = &etcdImageManager{conn}
-	conn.diskManager = &etcdDiskManager{conn}
+	conn.projectManager = &etcdProjectManager{conn: conn}
+	conn.imageManager = &etcdImageManager{conn: conn}
+	conn.diskManager = &etcdDiskManager{conn: conn}
+	conn.flavorManager = &etcdFlavorManager{conn: conn}
 	return conn, nil
 }
