@@ -148,7 +148,7 @@ func (fm *etcdFlavorManager) Update(ctx context.Context, flavor *db.Flavor, init
 	return txn.Commit(ctx)
 }
 
-func (fm *etcdFlavorManager) IntentDelete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
+func (fm *etcdFlavorManager) Delete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
 	flavor, err := fm.Get(ctx, id)
 	if err != nil {
 		return err

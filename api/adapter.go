@@ -69,13 +69,17 @@ func (mh *managerHandlers) delete(ctx context.Context, id ulid.ULID) error {
 func adaptManager(manager interface{}) *managerHandlers {
 	managerRv := reflect.ValueOf(manager)
 
+	deleteFnRv := managerRv.MethodByName("IntentDelete")
+	if !deleteFnRv.IsValid() {
+		deleteFnRv = managerRv.MethodByName("Delete")
+	}
 	return &managerHandlers{
 		newRv:    managerRv.MethodByName("NewEntity"),
 		listRv:   managerRv.MethodByName("List"),
 		getRv:    managerRv.MethodByName("Get"),
 		postRv:   managerRv.MethodByName("Create"),
 		putRv:    managerRv.MethodByName("Update"),
-		deleteRv: managerRv.MethodByName("IntentDelete"),
+		deleteRv: deleteFnRv,
 	}
 }
 

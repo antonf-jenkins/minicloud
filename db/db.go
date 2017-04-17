@@ -68,7 +68,7 @@ type ProjectManager interface {
 	Get(ctx context.Context, id ulid.ULID) (*Project, error)
 	Create(ctx context.Context, proj *Project) error
 	Update(ctx context.Context, proj *Project, initiator Initiator) error
-	IntentDelete(ctx context.Context, id ulid.ULID, initiator Initiator) error
+	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
 }
 
 type ImageManager interface {
@@ -95,7 +95,7 @@ type FlavorManager interface {
 	Get(ctx context.Context, id ulid.ULID) (*Flavor, error)
 	Create(ctx context.Context, flavor *Flavor) error
 	Update(ctx context.Context, flavor *Flavor, initiator Initiator) error
-	IntentDelete(ctx context.Context, id ulid.ULID, initiator Initiator) error
+	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
 }
 
 type Project struct {

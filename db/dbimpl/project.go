@@ -120,7 +120,7 @@ func (pm *etcdProjectManager) Update(ctx context.Context, proj *db.Project, init
 	return txn.Commit(ctx)
 }
 
-func (pm *etcdProjectManager) IntentDelete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
+func (pm *etcdProjectManager) Delete(ctx context.Context, id ulid.ULID, initiator db.Initiator) error {
 	proj, err := pm.Get(ctx, id)
 	if err != nil {
 		return err
