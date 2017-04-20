@@ -49,6 +49,7 @@ type Connection interface {
 	Images() ImageManager
 	Disks() DiskManager
 	Flavors() FlavorManager
+	Servers() ServerManager
 }
 
 type Transaction interface {
@@ -100,9 +101,10 @@ type FlavorManager interface {
 
 type Project struct {
 	EntityHeader
-	Name     string
-	ImageIds []ulid.ULID
-	DiskIds  []ulid.ULID
+	Name      string
+	ImageIds  []ulid.ULID
+	DiskIds   []ulid.ULID
+	ServerIds []ulid.ULID
 }
 
 func (p Project) String() string {
@@ -132,6 +134,8 @@ type Disk struct {
 	Pool      string
 	ImageId   ulid.ULID
 	Size      uint64
+	// TODO: check ServerId empty/not changed
+	ServerId ulid.ULID
 }
 
 func (disk *Disk) String() string {
@@ -142,10 +146,10 @@ func (disk *Disk) String() string {
 
 type Flavor struct {
 	EntityHeader
-	Name       string
-	NumCPUs    int
-	RAM        int
-	MachineIds []ulid.ULID
+	Name      string
+	NumCPUs   int
+	RAM       int
+	ServerIds []ulid.ULID
 }
 
 func (flavor *Flavor) String() string {
@@ -153,4 +157,28 @@ func (flavor *Flavor) String() string {
 		"Flavor{Id:%s Name:%s NumCPUs:%d RAM:%dMb [sv=%d cr=%d mr=%d]}",
 		flavor.Id, flavor.Name, flavor.NumCPUs, flavor.RAM,
 		flavor.SchemaVersion, flavor.CreateRev, flavor.ModifyRev)
+}
+
+type ServerManager interface {
+	NewEntity() *Server
+	Get(ctx context.Context, id ulid.ULID) (*Server, error)
+	Create(ctx context.Context, server *Server) error
+	Update(ctx context.Context, server *Server, initiator Initiator) error
+	IntentDelete(ctx context.Context, id ulid.ULID, initiator Initiator) error
+	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
+}
+
+type Server struct {
+	EntityHeader
+	ProjectId ulid.ULID
+	FlavorId  ulid.ULID
+	Name      string
+	DiskIds   []ulid.ULID
+	//PortIds   []ulid.ULID
+}
+
+func (m *Server) String() string {
+	return fmt.Sprintf(
+		"Server{Id:%s Name:%s [sv=%d cr=%d mr=%d]}",
+		m.Id, m.Name, m.SchemaVersion, m.CreateRev, m.ModifyRev)
 }

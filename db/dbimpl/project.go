@@ -22,7 +22,6 @@ import (
 	"github.com/antonf/minicloud/db"
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
-	"reflect"
 	"regexp"
 )
 
@@ -34,6 +33,9 @@ func validateProjectEmpty(p *db.Project, message string) error {
 	}
 	if len(p.DiskIds) > 0 {
 		return &db.FieldError{Entity: "project", Field: "DiskIds", Message: message}
+	}
+	if len(p.ServerIds) > 0 {
+		return &db.FieldError{Entity: "project", Field: "ServerIds", Message: message}
 	}
 	return nil
 }
@@ -52,17 +54,8 @@ func validateUpdateProject(p *db.Project, initiator db.Initiator) error {
 	if err := checkFieldRegexp("project", "Name", p.Name, regexpProjectName); err != nil {
 		return err
 	}
-	origVal := p.Original.(*db.Project)
-	if p.Id != origVal.Id {
-		return &db.FieldError{Entity: "project", Field: "Id", Message: "Field is read-only"}
-	}
-	if initiator != db.InitiatorSystem {
-		if !reflect.DeepEqual(origVal.ImageIds, p.ImageIds) {
-			return &db.FieldError{Entity: "project", Field: "ImageIds", Message: "Field is read-only"}
-		}
-		if !reflect.DeepEqual(origVal.DiskIds, p.DiskIds) {
-			return &db.FieldError{Entity: "project", Field: "DiskIds", Message: "Field is read-only"}
-		}
+	if err := checkReadOnlyFields(p, "Id", "ImageIds", "DiskIds", "ServerIds"); err != nil {
+		return err
 	}
 	return nil
 }

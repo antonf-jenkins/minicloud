@@ -23,7 +23,6 @@ import (
 	"github.com/antonf/minicloud/fsm"
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
-	"reflect"
 	"regexp"
 )
 
@@ -48,23 +47,17 @@ func validateImage(img *db.Image) error {
 }
 
 func validateUpdateImage(img *db.Image, initiator db.Initiator) error {
-	origImg := img.Original.(*db.Image)
-	if img.Id != origImg.Id {
-		return &db.FieldError{Entity: "image", Field: "Id", Message: "Field is read-only"}
-	}
-	if img.ProjectId != origImg.ProjectId {
-		return &db.FieldError{Entity: "image", Field: "ProjectId", Message: "Field is read-only"}
-	}
-	if err := fsm.ImageFSM.CheckTransition(origImg.State, img.State, initiator); err != nil {
-		return err
-	}
 	if err := checkFieldRegexp("image", "Name", img.Name, regexpImageName); err != nil {
 		return err
 	}
+	if err := checkReadOnlyFields(img, "Id", "ProjectId", "DiskIds"); err != nil {
+		return err
+	}
+	origImg := img.Original.(*db.Image)
+	if err := fsm.ImageFSM.CheckTransition(origImg.State, img.State, initiator); err != nil {
+		return err
+	}
 	if initiator != db.InitiatorSystem {
-		if !reflect.DeepEqual(origImg.DiskIds, img.DiskIds) {
-			return &db.FieldError{Entity: "image", Field: "DiskIds", Message: "Field is read-only"}
-		}
 		if img.Checksum != origImg.Checksum {
 			return &db.FieldError{Entity: "image", Field: "Checksum", Message: "Field is read-only"}
 		}

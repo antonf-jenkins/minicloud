@@ -37,9 +37,13 @@ var (
 		"disk": func(ctx context.Context, conn db.Connection, id ulid.ULID) (db.Entity, error) {
 			return conn.Disks().Get(ctx, id)
 		},
+		"server": func(ctx context.Context, conn db.Connection, id ulid.ULID) (db.Entity, error) {
+			return conn.Servers().Get(ctx, id)
+		},
 	}
 	machines = map[string]*StateMachine{
-		"disk": DiskFSM,
+		"disk":   DiskFSM,
+		"server": ServerFSM,
 	}
 )
 

@@ -23,15 +23,14 @@ import (
 	"github.com/antonf/minicloud/fsm"
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
-	"reflect"
 	"regexp"
 )
 
 var regexpFlavorName = regexp.MustCompile("^[a-z0-9_.-]{3,}$")
 
 func validateFlavorEmpty(p *db.Flavor, message string) error {
-	if len(p.MachineIds) > 0 {
-		return &db.FieldError{Entity: "flavor", Field: "MachineIds", Message: message}
+	if len(p.ServerIds) > 0 {
+		return &db.FieldError{Entity: "flavor", Field: "ServerIds", Message: message}
 	}
 	return nil
 }
@@ -59,23 +58,12 @@ func validateUpdateFlavor(flavor *db.Flavor, initiator db.Initiator) error {
 	if err := checkFieldRegexp("flavor", "Name", flavor.Name, regexpFlavorName); err != nil {
 		return err
 	}
-	origFlavor := flavor.Original.(*db.Flavor)
-	if flavor.Id != origFlavor.Id {
-		return &db.FieldError{Entity: "flavor", Field: "Id", Message: "Field is read-only"}
-	}
-	if flavor.NumCPUs != origFlavor.NumCPUs {
-		return &db.FieldError{Entity: "flavor", Field: "NumCPUs", Message: "Field is read-only"}
-	}
-	if flavor.RAM != origFlavor.RAM {
-		return &db.FieldError{Entity: "flavor", Field: "RAM", Message: "Field is read-only"}
-	}
-	if err := fsm.FlavorFSM.CheckTransition(origFlavor.State, flavor.State, initiator); err != nil {
+	if err := checkReadOnlyFields(flavor, "Id", "NumCPUs", "RAM", "ServerIds"); err != nil {
 		return err
 	}
-	if initiator != db.InitiatorSystem {
-		if !reflect.DeepEqual(origFlavor.MachineIds, flavor.MachineIds) {
-			return &db.FieldError{Entity: "flavor", Field: "MachineIds", Message: "Field is read-only"}
-		}
+	origFlavor := flavor.Original.(*db.Flavor)
+	if err := fsm.FlavorFSM.CheckTransition(origFlavor.State, flavor.State, initiator); err != nil {
+		return err
 	}
 	return nil
 }

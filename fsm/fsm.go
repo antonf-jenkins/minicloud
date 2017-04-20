@@ -115,6 +115,15 @@ func (sm *StateMachine) CheckTransition(from, to db.State, initiator db.Initiato
 	return &InvalidTransitionError{From: from, To: to}
 }
 
+func (sm *StateMachine) ChangeState(entity db.Entity, state db.State, initiator db.Initiator) error {
+	header := entity.Header()
+	if err := sm.CheckTransition(header.State, state, initiator); err != nil {
+		return err
+	}
+	header.State = state
+	return nil
+}
+
 func (fsm *StateMachine) Hook(state db.State, handler Hook) *StateMachine {
 	fsm.hooks[state] = handler
 	return fsm

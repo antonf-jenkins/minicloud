@@ -198,7 +198,7 @@ func (mon *Monitor) decodeResponses(ctx context.Context) {
 		go func() {
 			resp := &response{}
 			if err := decoder.Decode(resp); err != nil {
-				if err == io.EOF {
+				if err == io.EOF || mon.isDone() {
 					return
 				}
 				logger.Error(ctx, "error reading from monitor", "monitor", mon.path, "error", err)
@@ -209,7 +209,7 @@ func (mon *Monitor) decodeResponses(ctx context.Context) {
 		}()
 		select {
 		case <-ctx.Done():
-			mon.conn.Close()
+			close(mon.done)
 			return
 		case <-mon.done:
 			mon.conn.Close()
@@ -226,6 +226,7 @@ func (mon *Monitor) decodeResponses(ctx context.Context) {
 						"event", resp.Event,
 						"timestamp", timestamp,
 						"data", string(resp.Data))
+					// TODO: send events to subscribers
 				}
 			} else {
 				return
@@ -255,6 +256,15 @@ func (mon *Monitor) voidCommand(ctx context.Context, cmdName string, args interf
 		}
 	case <-ctx.Done():
 		return utils.ErrInterrupted
+	}
+}
+
+func (mon *Monitor) isDone() bool {
+	select {
+	case <-mon.done:
+		return true
+	default:
+		return false
 	}
 }
 

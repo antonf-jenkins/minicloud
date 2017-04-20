@@ -25,6 +25,7 @@ import (
 	"github.com/antonf/minicloud/log"
 	"github.com/antonf/minicloud/utils"
 	backend "github.com/coreos/etcd/clientv3"
+	"reflect"
 	"regexp"
 	"strings"
 )
@@ -86,6 +87,10 @@ func (c *etcdConnection) loadEntity(ctx context.Context, entity db.Entity) error
 	return buildEntity(opCtx, entity, kv.Value, kv.CreateRevision, kv.ModRevision)
 }
 
+func uniqueMetaKey(entity db.Entity, spec ...string) string {
+	return fmt.Sprintf("%s/%s/%s", db.MetaPrefix, db.GetEntityName(entity), strings.Join(spec, "/"))
+}
+
 func checkFieldRegexp(entity, field, value string, regexp *regexp.Regexp) error {
 	if !regexp.MatchString(value) {
 		return &db.FieldError{
@@ -97,6 +102,13 @@ func checkFieldRegexp(entity, field, value string, regexp *regexp.Regexp) error 
 	return nil
 }
 
-func uniqueMetaKey(entity db.Entity, spec ...string) string {
-	return fmt.Sprintf("%s/%s/%s", db.MetaPrefix, db.GetEntityName(entity), strings.Join(spec, "/"))
+func checkReadOnlyFields(entity db.Entity, fields ...string) error {
+	entityRv := reflect.ValueOf(entity).Elem()
+	origEntityRv := reflect.ValueOf(entity.Header().Original).Elem()
+	for _, field := range fields {
+		if !reflect.DeepEqual(entityRv.FieldByName(field).Interface(), origEntityRv.FieldByName(field).Interface()) {
+			return &db.FieldError{Entity: db.GetEntityName(entity), Field: field, Message: "Field is read-only"}
+		}
+	}
+	return nil
 }

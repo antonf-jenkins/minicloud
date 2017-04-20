@@ -18,6 +18,7 @@
 package qemu
 
 import (
+	"context"
 	"github.com/oklog/ulid"
 	"os"
 	"os/exec"
@@ -66,4 +67,18 @@ func (vm *VirtualMachine) Monitor() *Monitor {
 		panic("Monitor() call on uninitialized VM")
 	}
 	return vm.mon
+}
+
+func (vm *VirtualMachine) Kill(ctx context.Context) {
+	err := vm.cmd.Process.Kill()
+	if err != nil {
+		logger.Error(ctx, "failed to kill vm process", "vm_id", vm.Id, "process", vm.cmd.Process.Pid, "error", err)
+	}
+}
+
+func (vm *VirtualMachine) Release(ctx context.Context) {
+	err := vm.cmd.Process.Release()
+	if err != nil {
+		logger.Error(ctx, "failed to release vm process", "vm_id", vm.Id, "process", vm.cmd.Process.Pid, "error", err)
+	}
 }

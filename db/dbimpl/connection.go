@@ -35,6 +35,7 @@ type etcdConnection struct {
 	imageManager   *etcdImageManager
 	diskManager    *etcdDiskManager
 	flavorManager  *etcdFlavorManager
+	serverManager  *etcdServerManager
 }
 
 func (c *etcdConnection) Projects() db.ProjectManager {
@@ -51,6 +52,10 @@ func (c *etcdConnection) Disks() db.DiskManager {
 
 func (c *etcdConnection) Flavors() db.FlavorManager {
 	return c.flavorManager
+}
+
+func (c *etcdConnection) Servers() db.ServerManager {
+	return c.serverManager
 }
 
 func (c *etcdConnection) RawRead(ctx context.Context, key string) (*db.RawValue, error) {
@@ -149,5 +154,6 @@ func NewConnection(ctx context.Context, leaseTTL int64) (db.Connection, error) {
 	conn.imageManager = &etcdImageManager{conn: conn}
 	conn.diskManager = &etcdDiskManager{conn: conn}
 	conn.flavorManager = &etcdFlavorManager{conn: conn}
+	conn.serverManager = &etcdServerManager{conn: conn}
 	return conn, nil
 }

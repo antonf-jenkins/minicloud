@@ -98,6 +98,12 @@ func (vm *VirtualMachine) prepareCommand(ctx context.Context) (err error) {
 	if vm.cmd != nil {
 		return fmt.Errorf("Tried to start vm %s twice", vm.Id)
 	}
+	if vm.RAM == 0 {
+		return fmt.Errorf("Tried to start vm %s with zero RAM", vm.Id)
+	}
+	if vm.NumCPUs == 0 {
+		return fmt.Errorf("Tried to start vm %s with zero CPUs", vm.Id)
+	}
 	vm.cmd = exec.CommandContext(ctx, baseCmd, baseOptions...)
 	logFlags := os.O_WRONLY | os.O_APPEND | os.O_CREATE
 	if vm.cmd.Stdout, err = vm.openLocalFile("stdout.log", logFlags, 0600); err != nil {
@@ -147,7 +153,7 @@ func (vm *VirtualMachine) prepareCommand(ctx context.Context) (err error) {
 			idx, idx, netdev.MacAddress))
 	}
 
-	vm.appendArgs("-memory", strconv.Itoa(vm.RAM))
+	vm.appendArgs("-m", strconv.Itoa(vm.RAM))
 	vm.appendArgs("-smp", strconv.Itoa(vm.NumCPUs))
 
 	vm.appendVnc()
