@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package fsm
+package model
 
 import (
 	"context"
@@ -28,6 +28,11 @@ import (
 )
 
 var (
+	ServerFSM *StateMachine
+	virtualMachines = make(map[ulid.ULID]*qemu.VirtualMachine)
+)
+
+func init() {
 	ServerFSM = NewStateMachine().
 			InitialState(db.StateCreated).
 			UserTransition(db.StateReady, db.StateDeleting).
@@ -37,13 +42,12 @@ var (
 			SystemTransition(db.StateDeleting, db.StateDeleted).
 			Hook(db.StateCreated, HandleServerCreated).
 			Hook(db.StateDeleting, HandleServerDeleting)
-	virtualMachines = make(map[ulid.ULID]*qemu.VirtualMachine)
-)
+}
 
 func HandleServerCreated(ctx context.Context, conn db.Connection, entity db.Entity) {
 	server := entity.(*db.Server)
 
-	flavor, err := conn.Flavors().Get(ctx, server.FlavorId)
+	flavor, err := Flavors(conn).Get(ctx, server.FlavorId)
 	if err != nil {
 		failServerHandling(ctx, conn, server, err)
 		return
@@ -51,7 +55,7 @@ func HandleServerCreated(ctx context.Context, conn db.Connection, entity db.Enti
 
 	storageDevices := make([]qemu.StorageDevice, len(server.DiskIds))
 	for idx, diskId := range server.DiskIds {
-		disk, err := conn.Disks().Get(ctx, diskId)
+		disk, err := Disks(conn).Get(ctx, diskId)
 		if err != nil {
 			failServerHandling(ctx, conn, server, err)
 			return
@@ -99,12 +103,12 @@ func HandleServerCreated(ctx context.Context, conn db.Connection, entity db.Enti
 
 	virtualMachines[server.Id] = vm
 	utils.Retry(ctx, func(ctx context.Context) error {
-		server, err := conn.Servers().Get(ctx, server.Id)
+		server, err := Servers(conn).Get(ctx, server.Id)
 		if err != nil {
 			return err
 		}
 		server.State = db.StateReady
-		return conn.Servers().Update(ctx, server, db.InitiatorSystem)
+		return Servers(conn).Update(ctx, server, db.InitiatorSystem)
 	})
 }
 
@@ -120,7 +124,7 @@ func HandleServerDeleting(ctx context.Context, conn db.Connection, entity db.Ent
 		vm.Monitor().Close()
 	}
 
-	if err := conn.Servers().Delete(ctx, server.Id, db.InitiatorSystem); err != nil {
+	if err := Servers(conn).Delete(ctx, server.Id, db.InitiatorSystem); err != nil {
 		logger.Error(ctx, "failed to delete server", "error", err)
 	}
 }
@@ -133,12 +137,12 @@ func tapNameFromId(id ulid.ULID) string {
 func failServerHandling(ctx context.Context, conn db.Connection, server *db.Server, err error) {
 	logger.Error(ctx, "state handling failed", "state", server.State, "error", err)
 	utils.Retry(ctx, func(ctx context.Context) error {
-		server, err := conn.Servers().Get(ctx, server.Id)
+		server, err := Servers(conn).Get(ctx, server.Id)
 		if err != nil {
 			return err
 		}
 		server.State = db.StateError
-		return conn.Servers().Update(ctx, server, db.InitiatorSystem)
+		return Servers(conn).Update(ctx, server, db.InitiatorSystem)
 	})
 }
 

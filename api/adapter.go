@@ -52,7 +52,7 @@ func (mh *managerHandlers) get(ctx context.Context, id ulid.ULID) (reflect.Value
 }
 
 func (mh *managerHandlers) create(ctx context.Context, entity reflect.Value) error {
-	result := mh.postRv.Call([]reflect.Value{reflect.ValueOf(ctx), entity})
+	result := mh.postRv.Call([]reflect.Value{reflect.ValueOf(ctx), entity, reflectedInitiatorUser})
 	return toError(result[0])
 }
 

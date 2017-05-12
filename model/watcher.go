@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package fsm
+package model
 
 import (
 	"context"
@@ -29,16 +29,16 @@ import (
 var (
 	entityGetters = map[string]func(context.Context, db.Connection, ulid.ULID) (db.Entity, error){
 		"project": func(ctx context.Context, conn db.Connection, id ulid.ULID) (db.Entity, error) {
-			return conn.Projects().Get(ctx, id)
+			return Projects(conn).Get(ctx, id)
 		},
 		"image": func(ctx context.Context, conn db.Connection, id ulid.ULID) (db.Entity, error) {
-			return conn.Images().Get(ctx, id)
+			return Images(conn).Get(ctx, id)
 		},
 		"disk": func(ctx context.Context, conn db.Connection, id ulid.ULID) (db.Entity, error) {
-			return conn.Disks().Get(ctx, id)
+			return Disks(conn).Get(ctx, id)
 		},
 		"server": func(ctx context.Context, conn db.Connection, id ulid.ULID) (db.Entity, error) {
-			return conn.Servers().Get(ctx, id)
+			return Servers(conn).Get(ctx, id)
 		},
 	}
 	machines = map[string]*StateMachine{

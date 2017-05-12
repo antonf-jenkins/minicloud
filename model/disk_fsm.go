@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package fsm
+package model
 
 import (
 	"context"
@@ -24,22 +24,26 @@ import (
 	"github.com/antonf/minicloud/utils"
 )
 
-var DiskFSM = NewStateMachine().
-	InitialState(db.StateCreated).
-	UserTransition(db.StateReady, db.StateUpdated).
-	UserTransition(db.StateReady, db.StateDeleting).
-	UserTransition(db.StateError, db.StateDeleting).
-	SystemTransition(db.StateCreated, db.StateReady).
-	SystemTransition(db.StateUpdated, db.StateReady).
-	SystemTransition(db.StateInUse, db.StateReady).
-	SystemTransition(db.StateReady, db.StateInUse).
-	SystemTransition(db.StateCreated, db.StateError).
-	SystemTransition(db.StateReady, db.StateError).
-	SystemTransition(db.StateUpdated, db.StateError).
-	SystemTransition(db.StateInUse, db.StateError).
-	Hook(db.StateCreated, HandleDiskCreated).
-	Hook(db.StateUpdated, HandleDiskUpdated).
-	Hook(db.StateDeleting, HandleDiskDeleting)
+var DiskFSM *StateMachine
+
+func init() {
+	DiskFSM = NewStateMachine().
+			InitialState(db.StateCreated).
+			UserTransition(db.StateReady, db.StateUpdated).
+			UserTransition(db.StateReady, db.StateDeleting).
+			UserTransition(db.StateError, db.StateDeleting).
+			SystemTransition(db.StateCreated, db.StateReady).
+			SystemTransition(db.StateUpdated, db.StateReady).
+			SystemTransition(db.StateInUse, db.StateReady).
+			SystemTransition(db.StateReady, db.StateInUse).
+			SystemTransition(db.StateCreated, db.StateError).
+			SystemTransition(db.StateReady, db.StateError).
+			SystemTransition(db.StateUpdated, db.StateError).
+			SystemTransition(db.StateInUse, db.StateError).
+			Hook(db.StateCreated, HandleDiskCreated).
+			Hook(db.StateUpdated, HandleDiskUpdated).
+			Hook(db.StateDeleting, HandleDiskDeleting)
+}
 
 func HandleDiskCreated(ctx context.Context, conn db.Connection, entity db.Entity) {
 	disk := entity.(*db.Disk)
@@ -55,7 +59,7 @@ func HandleDiskCreated(ctx context.Context, conn db.Connection, entity db.Entity
 	} else {
 		disk.State = db.StateReady
 	}
-	if err = conn.Disks().Update(ctx, disk, db.InitiatorSystem); err != nil {
+	if err = Disks(conn).Update(ctx, disk, db.InitiatorSystem); err != nil {
 		logger.Error(ctx, "failed to change disk state state", "id", disk.Id, "state", disk.State, "error", err)
 	}
 }
@@ -68,22 +72,23 @@ func HandleDiskUpdated(ctx context.Context, conn db.Connection, entity db.Entity
 	} else {
 		disk.State = db.StateReady
 	}
-	if err := conn.Disks().Update(ctx, disk, db.InitiatorSystem); err != nil {
+	if err := Disks(conn).Update(ctx, disk, db.InitiatorSystem); err != nil {
 		logger.Error(ctx, "failed to change disk state state", "id", disk.Id, "state", disk.State, "error", err)
 	}
 }
 
 func HandleDiskDeleting(ctx context.Context, conn db.Connection, entity db.Entity) {
 	disk := entity.(*db.Disk)
+	diskManager := Disks(conn)
 	if err := ceph.DeleteDisk(ctx, disk.Pool, disk.Id.String()); err != nil {
 		logger.Debug(ctx, "setting disk state to error", "id", disk.Id, "cause", err)
 		utils.Retry(ctx, func(ctx context.Context) error {
-			disk, err := conn.Disks().Get(ctx, disk.Id)
+			disk, err := diskManager.Get(ctx, disk.Id)
 			if err != nil {
 				return err
 			}
 			disk.State = db.StateError
-			if err := conn.Disks().Update(ctx, disk, db.InitiatorSystem); err != nil {
+			if err := diskManager.Update(ctx, disk, db.InitiatorSystem); err != nil {
 				logger.Error(ctx, "failed to change disk state", "id", disk.Id, "state", disk.State, "error", err)
 				return err
 			}
@@ -92,7 +97,7 @@ func HandleDiskDeleting(ctx context.Context, conn db.Connection, entity db.Entit
 		return
 	}
 	err := utils.Retry(ctx, func(ctx context.Context) error {
-		return conn.Disks().Delete(ctx, disk.Id, db.InitiatorSystem)
+		return diskManager.Delete(ctx, disk.Id, db.InitiatorSystem)
 	})
 	if err != nil {
 		logger.Error(ctx, "failed to delete disk from database", "id", disk.Id, "error", err)

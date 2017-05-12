@@ -41,6 +41,18 @@ func RemoveULID(list []ulid.ULID, item ulid.ULID) []ulid.ULID {
 	return list
 }
 
+func ULIDSliceEqual(x []ulid.ULID, y []ulid.ULID) bool {
+	if len(x) != len(y) {
+		return false
+	}
+	for i := range x {
+		if x[i] != y[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func ConvertToUUID(ulid ulid.ULID) string {
 	buf := make([]byte, 36)
 

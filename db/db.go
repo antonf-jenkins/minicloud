@@ -29,7 +29,6 @@ type Initiator int
 const (
 	InitiatorSystem Initiator = 1 << 0
 	InitiatorUser   Initiator = 1 << 1
-	DataPrefix                = "/minicloud/db/data"
 	MetaPrefix                = "/minicloud/db/meta"
 )
 
@@ -44,12 +43,6 @@ type Connection interface {
 	RawReadPrefix(ctx context.Context, key string) ([]RawValue, error)
 	RawWatchPrefix(ctx context.Context, prefix string) chan *RawValue
 	NewTransaction() Transaction
-
-	Projects() ProjectManager
-	Images() ImageManager
-	Disks() DiskManager
-	Flavors() FlavorManager
-	Servers() ServerManager
 }
 
 type Transaction interface {
@@ -62,41 +55,6 @@ type Transaction interface {
 	DeleteMeta(ctx context.Context, key string)
 	AcquireLock(ctx context.Context, key string)
 	ReleaseLock(ctx context.Context, key string)
-}
-
-type ProjectManager interface {
-	NewEntity() *Project
-	Get(ctx context.Context, id ulid.ULID) (*Project, error)
-	Create(ctx context.Context, proj *Project) error
-	Update(ctx context.Context, proj *Project, initiator Initiator) error
-	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
-}
-
-type ImageManager interface {
-	NewEntity() *Image
-	Get(ctx context.Context, id ulid.ULID) (*Image, error)
-	Create(ctx context.Context, img *Image) error
-	Update(ctx context.Context, img *Image, initiator Initiator) error
-	IntentDelete(ctx context.Context, id ulid.ULID, initiator Initiator) error
-	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
-}
-
-type DiskManager interface {
-	NewEntity() *Disk
-	Get(ctx context.Context, id ulid.ULID) (*Disk, error)
-	Create(ctx context.Context, disk *Disk) error
-	Update(ctx context.Context, disk *Disk, initiator Initiator) error
-	IntentDelete(ctx context.Context, id ulid.ULID, initiator Initiator) error
-	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
-}
-
-type FlavorManager interface {
-	NewEntity() *Flavor
-	List(ctx context.Context) ([]*Flavor, error)
-	Get(ctx context.Context, id ulid.ULID) (*Flavor, error)
-	Create(ctx context.Context, flavor *Flavor) error
-	Update(ctx context.Context, flavor *Flavor, initiator Initiator) error
-	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
 }
 
 type Project struct {
@@ -134,7 +92,6 @@ type Disk struct {
 	Pool      string
 	ImageId   ulid.ULID
 	Size      uint64
-	// TODO: check ServerId empty/not changed
 	ServerId ulid.ULID
 }
 
@@ -157,15 +114,6 @@ func (flavor *Flavor) String() string {
 		"Flavor{Id:%s Name:%s NumCPUs:%d RAM:%dMb [sv=%d cr=%d mr=%d]}",
 		flavor.Id, flavor.Name, flavor.NumCPUs, flavor.RAM,
 		flavor.SchemaVersion, flavor.CreateRev, flavor.ModifyRev)
-}
-
-type ServerManager interface {
-	NewEntity() *Server
-	Get(ctx context.Context, id ulid.ULID) (*Server, error)
-	Create(ctx context.Context, server *Server) error
-	Update(ctx context.Context, server *Server, initiator Initiator) error
-	IntentDelete(ctx context.Context, id ulid.ULID, initiator Initiator) error
-	Delete(ctx context.Context, id ulid.ULID, initiator Initiator) error
 }
 
 type Server struct {

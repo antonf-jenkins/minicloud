@@ -20,11 +20,16 @@ package dbimpl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/antonf/minicloud/db"
 	"github.com/antonf/minicloud/utils"
 	backend "github.com/coreos/etcd/clientv3"
 	"strconv"
 )
+
+func dataKey(entity db.Entity) string {
+	return fmt.Sprintf("/minicloud/db/data/%s/%s", db.GetEntityName(entity), entity.Header().Id)
+}
 
 func (c *etcdConnection) NewTransaction() db.Transaction {
 	return &etcdTransaction{

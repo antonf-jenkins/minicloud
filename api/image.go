@@ -27,15 +27,17 @@ import (
 	"github.com/oklog/ulid"
 	"io"
 	"net/http"
+	"github.com/antonf/minicloud/model"
 )
 
 func setImageStateError(ctx context.Context, conn db.Connection, id ulid.ULID) error {
-	image, err := conn.Images().Get(ctx, id)
+	imageManager := model.Images(conn)
+	image, err := imageManager.Get(ctx, id)
 	if err != nil {
 		return err
 	}
 	image.State = db.StateError
-	if err := conn.Images().Update(ctx, image, db.InitiatorSystem); err != nil {
+	if err := imageManager.Update(ctx, image, db.InitiatorSystem); err != nil {
 		return err
 	}
 	return nil
@@ -49,15 +51,16 @@ func UploadImage(ctx context.Context, conn db.Connection, w http.ResponseWriter,
 	}
 
 	// Get image and check it's state
+	imageManager := model.Images(conn)
 	id := params.GetULID(ctx, "id")
-	image, err := conn.Images().Get(ctx, id)
+	image, err := imageManager.Get(ctx, id)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 
 	image.State = db.StateUploading
-	if err := conn.Images().Update(ctx, image, db.InitiatorSystem); err != nil {
+	if err := imageManager.Update(ctx, image, db.InitiatorSystem); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -76,13 +79,13 @@ func UploadImage(ctx context.Context, conn db.Connection, w http.ResponseWriter,
 
 	// Update image state
 	if err := utils.Retry(ctx, func(ctx context.Context) error {
-		image, err := conn.Images().Get(ctx, id)
+		image, err := imageManager.Get(ctx, id)
 		if err != nil {
 			return err
 		}
 		image.State = db.StateReady
 		image.Checksum = fmt.Sprintf("%32x", md5hash.Sum(nil))
-		if err := conn.Images().Update(ctx, image, db.InitiatorSystem); err != nil {
+		if err := imageManager.Update(ctx, image, db.InitiatorSystem); err != nil {
 			return err
 		}
 		return nil
