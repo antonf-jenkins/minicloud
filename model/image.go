@@ -98,7 +98,7 @@ func (m *ImageManager) Update(ctx context.Context, entity *Image, initiator db.I
 	if entity.ProjectId != origEntity.ProjectId {
 		return &db.FieldError{Entity: "image", Field: "ProjectId", Message: "Field change prohibited"}
 	}
-	if !utils.ULIDSliceEqual(entity.DiskIds, origEntity.DiskIds) {
+	if !utils.ULIDListsEqual(entity.DiskIds, origEntity.DiskIds) {
 		return &db.FieldError{Entity: "image", Field: "DiskIds", Message: "Field change prohibited"}
 	}
 	txn := m.conn.NewTransaction()

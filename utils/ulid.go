@@ -41,7 +41,7 @@ func RemoveULID(list []ulid.ULID, item ulid.ULID) []ulid.ULID {
 	return list
 }
 
-func ULIDSliceEqual(x []ulid.ULID, y []ulid.ULID) bool {
+func ULIDListsEqual(x []ulid.ULID, y []ulid.ULID) bool {
 	if len(x) != len(y) {
 		return false
 	}

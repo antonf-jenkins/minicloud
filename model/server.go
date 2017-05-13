@@ -109,7 +109,7 @@ func (m *ServerManager) Update(ctx context.Context, entity *Server, initiator db
 	if entity.FlavorId != origEntity.FlavorId {
 		return &db.FieldError{Entity: "server", Field: "FlavorId", Message: "Field change prohibited"}
 	}
-	if !utils.ULIDSliceEqual(entity.DiskIds, origEntity.DiskIds) {
+	if !utils.ULIDListsEqual(entity.DiskIds, origEntity.DiskIds) {
 		return &db.FieldError{Entity: "server", Field: "DiskIds", Message: "Field change prohibited"}
 	}
 	if !regexpServerName.MatchString(entity.Name) {

@@ -104,13 +104,13 @@ func (m *ProjectManager) Update(ctx context.Context, entity *Project, initiator 
 	if !regexpProjectName.MatchString(entity.Name) {
 		return &db.FieldError{Entity: "project", Field: "Name", Message: "Name should be between 3 and 200 characters from following set: a-z A-Z 0-9 _.:-"}
 	}
-	if !utils.ULIDSliceEqual(entity.ImageIds, origEntity.ImageIds) {
+	if !utils.ULIDListsEqual(entity.ImageIds, origEntity.ImageIds) {
 		return &db.FieldError{Entity: "project", Field: "ImageIds", Message: "Field change prohibited"}
 	}
-	if !utils.ULIDSliceEqual(entity.DiskIds, origEntity.DiskIds) {
+	if !utils.ULIDListsEqual(entity.DiskIds, origEntity.DiskIds) {
 		return &db.FieldError{Entity: "project", Field: "DiskIds", Message: "Field change prohibited"}
 	}
-	if !utils.ULIDSliceEqual(entity.ServerIds, origEntity.ServerIds) {
+	if !utils.ULIDListsEqual(entity.ServerIds, origEntity.ServerIds) {
 		return &db.FieldError{Entity: "project", Field: "ServerIds", Message: "Field change prohibited"}
 	}
 	txn := m.conn.NewTransaction()

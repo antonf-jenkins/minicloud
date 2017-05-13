@@ -98,7 +98,7 @@ func (m *FlavorManager) Update(ctx context.Context, entity *Flavor, initiator db
 	if !regexpFlavorName.MatchString(entity.Name) {
 		return &db.FieldError{Entity: "flavor", Field: "Name", Message: "Flavor name can only consist of lowercase letters 'a' to 'z', digits, dot, dash or underscore."}
 	}
-	if !utils.ULIDSliceEqual(entity.ServerIds, origEntity.ServerIds) {
+	if !utils.ULIDListsEqual(entity.ServerIds, origEntity.ServerIds) {
 		return &db.FieldError{Entity: "flavor", Field: "ServerIds", Message: "Field change prohibited"}
 	}
 	txn := m.conn.NewTransaction()
