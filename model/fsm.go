@@ -23,6 +23,7 @@ import (
 	"github.com/antonf/minicloud/db"
 	"github.com/antonf/minicloud/utils"
 	"github.com/oklog/ulid"
+	"strings"
 )
 
 type Hook func(ctx context.Context, conn db.Connection, entity db.Entity)
@@ -154,7 +155,7 @@ func (fsm *StateMachine) Notify(ctx context.Context, tx db.Transaction, entity d
 	if toState == fromState {
 		return
 	}
-	entityName := db.GetEntityName(entity)
+	entityName := strings.ToLower(entity.EntityName())
 	if fsm.NeedNotify(fromState) {
 		// Delete previous notification
 		tx.DeleteMeta(ctx, notificationKey(entityName, hdr.Id, fromState))
@@ -173,7 +174,7 @@ func (fsm *StateMachine) Notify(ctx context.Context, tx db.Transaction, entity d
 func (fsm *StateMachine) DeleteNotification(ctx context.Context, tx db.Transaction, entity db.Entity) {
 	hdr := entity.Header()
 	if fsm.NeedNotify(hdr.State) {
-		entityName := db.GetEntityName(entity)
+		entityName := strings.ToLower(entity.EntityName())
 		tx.DeleteMeta(ctx, notificationKey(entityName, hdr.Id, hdr.State))
 	}
 }

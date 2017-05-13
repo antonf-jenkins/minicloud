@@ -17,6 +17,8 @@
  */
 package db
 
+type State string
+
 const (
 	StateNone           State = ""
 	StateError          State = "error"

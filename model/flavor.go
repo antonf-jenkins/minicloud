@@ -37,18 +37,18 @@ func Flavors(conn db.Connection) *FlavorManager {
 
 var regexpFlavorName = regexp.MustCompile("^[a-z0-9_.-]{3,}$")
 
-func (m *FlavorManager) NewEntity() *db.Flavor {
-	return &db.Flavor{EntityHeader: db.EntityHeader{SchemaVersion: 1, State: db.StateCreated}}
+func (m *FlavorManager) NewEntity() *Flavor {
+	return &Flavor{EntityHeader: db.EntityHeader{SchemaVersion: 1, State: db.StateCreated}}
 }
-func (m *FlavorManager) List(ctx context.Context) ([]*db.Flavor, error) {
+func (m *FlavorManager) List(ctx context.Context) ([]*Flavor, error) {
 	values, err := m.conn.RawReadPrefix(ctx, "/minicloud/db/data/flavor/")
 	if err != nil {
 		return nil, err
 	}
-	result := make([]*db.Flavor, len(values))
+	result := make([]*Flavor, len(values))
 	for i, value := range values {
-		entity := &db.Flavor{}
-		origEntity := &db.Flavor{}
+		entity := &Flavor{}
+		origEntity := &Flavor{}
 		if err := json.Unmarshal(value.Data, entity); err != nil {
 			return nil, err
 		}
@@ -62,7 +62,7 @@ func (m *FlavorManager) List(ctx context.Context) ([]*db.Flavor, error) {
 	}
 	return result, nil
 }
-func (m *FlavorManager) Get(ctx context.Context, id ulid.ULID) (*db.Flavor, error) {
+func (m *FlavorManager) Get(ctx context.Context, id ulid.ULID) (*Flavor, error) {
 	value, err := m.conn.RawRead(ctx, fmt.Sprintf("/minicloud/db/data/flavor/%s", id))
 	if err != nil {
 		return nil, err
@@ -70,20 +70,16 @@ func (m *FlavorManager) Get(ctx context.Context, id ulid.ULID) (*db.Flavor, erro
 	if value.Data == nil {
 		return nil, &db.NotFoundError{Entity: "Flavor", Id: id}
 	}
-	entity := &db.Flavor{}
-	origEntity := &db.Flavor{}
+	entity := &Flavor{}
 	if err := json.Unmarshal(value.Data, entity); err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(value.Data, origEntity); err != nil {
 		return nil, err
 	}
 	entity.CreateRev = value.CreateRev
 	entity.ModifyRev = value.ModifyRev
-	entity.Original = origEntity
+	entity.Original = entity.Copy()
 	return entity, nil
 }
-func (m *FlavorManager) Create(ctx context.Context, entity *db.Flavor, initiator db.Initiator) error {
+func (m *FlavorManager) Create(ctx context.Context, entity *Flavor, initiator db.Initiator) error {
 	entity.Id = utils.NewULID()
 	if !regexpFlavorName.MatchString(entity.Name) {
 		return &db.FieldError{Entity: "flavor", Field: "Name", Message: "Flavor name can only consist of lowercase letters 'a' to 'z', digits, dot, dash or underscore."}
@@ -97,8 +93,8 @@ func (m *FlavorManager) Create(ctx context.Context, entity *db.Flavor, initiator
 	txn.CreateMeta(ctx, key0, entity.Id.String())
 	return txn.Commit(ctx)
 }
-func (m *FlavorManager) Update(ctx context.Context, entity *db.Flavor, initiator db.Initiator) error {
-	origEntity := entity.Original.(*db.Flavor)
+func (m *FlavorManager) Update(ctx context.Context, entity *Flavor, initiator db.Initiator) error {
+	origEntity := entity.Original.(*Flavor)
 	if !regexpFlavorName.MatchString(entity.Name) {
 		return &db.FieldError{Entity: "flavor", Field: "Name", Message: "Flavor name can only consist of lowercase letters 'a' to 'z', digits, dot, dash or underscore."}
 	}

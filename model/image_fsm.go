@@ -43,7 +43,7 @@ func init() {
 }
 
 func HandleImageDeleting(ctx context.Context, conn db.Connection, entity db.Entity) {
-	img := entity.(*db.Image)
+	img := entity.(*Image)
 	if err := ceph.DeleteImage(ctx, "images", img.Id.String()); err != nil {
 		logger.Debug(ctx, "setting image state to error", "id", img.Id, "cause", err)
 		utils.Retry(ctx, func(ctx context.Context) error {

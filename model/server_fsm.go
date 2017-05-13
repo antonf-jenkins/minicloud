@@ -28,24 +28,24 @@ import (
 )
 
 var (
-	ServerFSM *StateMachine
+	ServerFSM       *StateMachine
 	virtualMachines = make(map[ulid.ULID]*qemu.VirtualMachine)
 )
 
 func init() {
 	ServerFSM = NewStateMachine().
-			InitialState(db.StateCreated).
-			UserTransition(db.StateReady, db.StateDeleting).
-			UserTransition(db.StateError, db.StateDeleting).
-			SystemTransition(db.StateCreated, db.StateReady).
-			SystemTransition(db.StateCreated, db.StateError).
-			SystemTransition(db.StateDeleting, db.StateDeleted).
-			Hook(db.StateCreated, HandleServerCreated).
-			Hook(db.StateDeleting, HandleServerDeleting)
+		InitialState(db.StateCreated).
+		UserTransition(db.StateReady, db.StateDeleting).
+		UserTransition(db.StateError, db.StateDeleting).
+		SystemTransition(db.StateCreated, db.StateReady).
+		SystemTransition(db.StateCreated, db.StateError).
+		SystemTransition(db.StateDeleting, db.StateDeleted).
+		Hook(db.StateCreated, HandleServerCreated).
+		Hook(db.StateDeleting, HandleServerDeleting)
 }
 
 func HandleServerCreated(ctx context.Context, conn db.Connection, entity db.Entity) {
-	server := entity.(*db.Server)
+	server := entity.(*Server)
 
 	flavor, err := Flavors(conn).Get(ctx, server.FlavorId)
 	if err != nil {
@@ -113,7 +113,7 @@ func HandleServerCreated(ctx context.Context, conn db.Connection, entity db.Enti
 }
 
 func HandleServerDeleting(ctx context.Context, conn db.Connection, entity db.Entity) {
-	server := entity.(*db.Server)
+	server := entity.(*Server)
 
 	if vm, ok := virtualMachines[server.Id]; ok {
 		delete(virtualMachines, server.Id)
@@ -134,7 +134,7 @@ func tapNameFromId(id ulid.ULID) string {
 	return "tap" + idStr[len(idStr)-12:]
 }
 
-func failServerHandling(ctx context.Context, conn db.Connection, server *db.Server, err error) {
+func failServerHandling(ctx context.Context, conn db.Connection, server *Server, err error) {
 	logger.Error(ctx, "state handling failed", "state", server.State, "error", err)
 	utils.Retry(ctx, func(ctx context.Context) error {
 		server, err := Servers(conn).Get(ctx, server.Id)

@@ -53,6 +53,14 @@ func ULIDSliceEqual(x []ulid.ULID, y []ulid.ULID) bool {
 	return true
 }
 
+func ULIDListCopy(x []ulid.ULID) []ulid.ULID {
+	y := make([]ulid.ULID, len(x))
+	for i, value := range x {
+		y[i] = value
+	}
+	return y
+}
+
 func ConvertToUUID(ulid ulid.ULID) string {
 	buf := make([]byte, 36)
 

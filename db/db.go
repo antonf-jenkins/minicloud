@@ -19,11 +19,9 @@ package db
 
 import (
 	"context"
-	"fmt"
 	"github.com/oklog/ulid"
 )
 
-type State string
 type Initiator int
 
 const (
@@ -57,76 +55,20 @@ type Transaction interface {
 	ReleaseLock(ctx context.Context, key string)
 }
 
-type Project struct {
-	EntityHeader
-	Name      string
-	ImageIds  []ulid.ULID
-	DiskIds   []ulid.ULID
-	ServerIds []ulid.ULID
+type Entity interface {
+	Header() *EntityHeader
+	EntityName() string
 }
 
-func (p Project) String() string {
-	return fmt.Sprintf(
-		"Project{Id:%s Name:%s [sv=%d cr=%d mr=%d]}",
-		p.Id, p.Name, p.SchemaVersion, p.CreateRev, p.ModifyRev)
+type EntityHeader struct {
+	SchemaVersion int64
+	CreateRev     int64  `json:"-"`
+	ModifyRev     int64  `json:"-"`
+	Original      Entity `json:"-"`
+	Id            ulid.ULID
+	State         State
 }
 
-type Image struct {
-	EntityHeader
-	ProjectId ulid.ULID
-	Name      string
-	Checksum  string
-	DiskIds   []ulid.ULID
-}
-
-func (img *Image) String() string {
-	return fmt.Sprintf(
-		"Image{Id:%s Name:%s [sv=%d cr=%d mr=%d]}",
-		img.Id, img.Name, img.SchemaVersion, img.CreateRev, img.ModifyRev)
-}
-
-type Disk struct {
-	EntityHeader
-	ProjectId ulid.ULID
-	Desc      string
-	Pool      string
-	ImageId   ulid.ULID
-	Size      uint64
-	ServerId ulid.ULID
-}
-
-func (disk *Disk) String() string {
-	return fmt.Sprintf(
-		"Disk{Id:%s [sv=%d cr=%d mr=%d]}",
-		disk.Id, disk.SchemaVersion, disk.CreateRev, disk.ModifyRev)
-}
-
-type Flavor struct {
-	EntityHeader
-	Name      string
-	NumCPUs   int
-	RAM       int
-	ServerIds []ulid.ULID
-}
-
-func (flavor *Flavor) String() string {
-	return fmt.Sprintf(
-		"Flavor{Id:%s Name:%s NumCPUs:%d RAM:%dMb [sv=%d cr=%d mr=%d]}",
-		flavor.Id, flavor.Name, flavor.NumCPUs, flavor.RAM,
-		flavor.SchemaVersion, flavor.CreateRev, flavor.ModifyRev)
-}
-
-type Server struct {
-	EntityHeader
-	ProjectId ulid.ULID
-	FlavorId  ulid.ULID
-	Name      string
-	DiskIds   []ulid.ULID
-	//PortIds   []ulid.ULID
-}
-
-func (m *Server) String() string {
-	return fmt.Sprintf(
-		"Server{Id:%s Name:%s [sv=%d cr=%d mr=%d]}",
-		m.Id, m.Name, m.SchemaVersion, m.CreateRev, m.ModifyRev)
+func (hdr *EntityHeader) Header() *EntityHeader {
+	return hdr
 }

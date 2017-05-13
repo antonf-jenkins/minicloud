@@ -37,18 +37,18 @@ func Projects(conn db.Connection) *ProjectManager {
 
 var regexpProjectName = regexp.MustCompile("^[a-zA-Z0-9_.:-]{3,200}$")
 
-func (m *ProjectManager) NewEntity() *db.Project {
-	return &db.Project{EntityHeader: db.EntityHeader{SchemaVersion: 1, State: db.StateCreated}}
+func (m *ProjectManager) NewEntity() *Project {
+	return &Project{EntityHeader: db.EntityHeader{SchemaVersion: 1, State: db.StateCreated}}
 }
-func (m *ProjectManager) List(ctx context.Context) ([]*db.Project, error) {
+func (m *ProjectManager) List(ctx context.Context) ([]*Project, error) {
 	values, err := m.conn.RawReadPrefix(ctx, "/minicloud/db/data/project/")
 	if err != nil {
 		return nil, err
 	}
-	result := make([]*db.Project, len(values))
+	result := make([]*Project, len(values))
 	for i, value := range values {
-		entity := &db.Project{}
-		origEntity := &db.Project{}
+		entity := &Project{}
+		origEntity := &Project{}
 		if err := json.Unmarshal(value.Data, entity); err != nil {
 			return nil, err
 		}
@@ -62,7 +62,7 @@ func (m *ProjectManager) List(ctx context.Context) ([]*db.Project, error) {
 	}
 	return result, nil
 }
-func (m *ProjectManager) Get(ctx context.Context, id ulid.ULID) (*db.Project, error) {
+func (m *ProjectManager) Get(ctx context.Context, id ulid.ULID) (*Project, error) {
 	value, err := m.conn.RawRead(ctx, fmt.Sprintf("/minicloud/db/data/project/%s", id))
 	if err != nil {
 		return nil, err
@@ -70,20 +70,16 @@ func (m *ProjectManager) Get(ctx context.Context, id ulid.ULID) (*db.Project, er
 	if value.Data == nil {
 		return nil, &db.NotFoundError{Entity: "Project", Id: id}
 	}
-	entity := &db.Project{}
-	origEntity := &db.Project{}
+	entity := &Project{}
 	if err := json.Unmarshal(value.Data, entity); err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(value.Data, origEntity); err != nil {
 		return nil, err
 	}
 	entity.CreateRev = value.CreateRev
 	entity.ModifyRev = value.ModifyRev
-	entity.Original = origEntity
+	entity.Original = entity.Copy()
 	return entity, nil
 }
-func (m *ProjectManager) Create(ctx context.Context, entity *db.Project, initiator db.Initiator) error {
+func (m *ProjectManager) Create(ctx context.Context, entity *Project, initiator db.Initiator) error {
 	entity.Id = utils.NewULID()
 	if !regexpProjectName.MatchString(entity.Name) {
 		return &db.FieldError{Entity: "project", Field: "Name", Message: "Name should be between 3 and 200 characters from following set: a-z A-Z 0-9 _.:-"}
@@ -103,8 +99,8 @@ func (m *ProjectManager) Create(ctx context.Context, entity *db.Project, initiat
 	txn.CreateMeta(ctx, key0, entity.Id.String())
 	return txn.Commit(ctx)
 }
-func (m *ProjectManager) Update(ctx context.Context, entity *db.Project, initiator db.Initiator) error {
-	origEntity := entity.Original.(*db.Project)
+func (m *ProjectManager) Update(ctx context.Context, entity *Project, initiator db.Initiator) error {
+	origEntity := entity.Original.(*Project)
 	if !regexpProjectName.MatchString(entity.Name) {
 		return &db.FieldError{Entity: "project", Field: "Name", Message: "Name should be between 3 and 200 characters from following set: a-z A-Z 0-9 _.:-"}
 	}

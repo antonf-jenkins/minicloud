@@ -37,10 +37,10 @@ func Servers(conn db.Connection) *ServerManager {
 
 var regexpServerName = regexp.MustCompile("^[a-z]([a-z0-9-]*[a-z0-9])?$|^[0-9][a-z0-9-]*([a-z]([a-z0-9-]*[a-z0-9])?|-[a-z0-9-]*[a-z0-9])$")
 
-func (m *ServerManager) NewEntity() *db.Server {
-	return &db.Server{EntityHeader: db.EntityHeader{SchemaVersion: 1, State: db.StateCreated}}
+func (m *ServerManager) NewEntity() *Server {
+	return &Server{EntityHeader: db.EntityHeader{SchemaVersion: 1, State: db.StateCreated}}
 }
-func (m *ServerManager) Get(ctx context.Context, id ulid.ULID) (*db.Server, error) {
+func (m *ServerManager) Get(ctx context.Context, id ulid.ULID) (*Server, error) {
 	value, err := m.conn.RawRead(ctx, fmt.Sprintf("/minicloud/db/data/server/%s", id))
 	if err != nil {
 		return nil, err
@@ -48,20 +48,16 @@ func (m *ServerManager) Get(ctx context.Context, id ulid.ULID) (*db.Server, erro
 	if value.Data == nil {
 		return nil, &db.NotFoundError{Entity: "Server", Id: id}
 	}
-	entity := &db.Server{}
-	origEntity := &db.Server{}
+	entity := &Server{}
 	if err := json.Unmarshal(value.Data, entity); err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(value.Data, origEntity); err != nil {
 		return nil, err
 	}
 	entity.CreateRev = value.CreateRev
 	entity.ModifyRev = value.ModifyRev
-	entity.Original = origEntity
+	entity.Original = entity.Copy()
 	return entity, nil
 }
-func (m *ServerManager) Create(ctx context.Context, entity *db.Server, initiator db.Initiator) error {
+func (m *ServerManager) Create(ctx context.Context, entity *Server, initiator db.Initiator) error {
 	entity.Id = utils.NewULID()
 	if err := ServerFSM.CheckInitialState(entity.State); err != nil {
 		return err
@@ -102,8 +98,8 @@ func (m *ServerManager) Create(ctx context.Context, entity *db.Server, initiator
 	ServerFSM.Notify(ctx, txn, entity)
 	return txn.Commit(ctx)
 }
-func (m *ServerManager) Update(ctx context.Context, entity *db.Server, initiator db.Initiator) error {
-	origEntity := entity.Original.(*db.Server)
+func (m *ServerManager) Update(ctx context.Context, entity *Server, initiator db.Initiator) error {
+	origEntity := entity.Original.(*Server)
 	if err := ServerFSM.CheckTransition(origEntity.State, entity.State, initiator); err != nil {
 		return err
 	}

@@ -33,10 +33,10 @@ type DiskManager struct {
 func Disks(conn db.Connection) *DiskManager {
 	return &DiskManager{conn: conn}
 }
-func (m *DiskManager) NewEntity() *db.Disk {
-	return &db.Disk{EntityHeader: db.EntityHeader{SchemaVersion: 1, State: db.StateCreated}}
+func (m *DiskManager) NewEntity() *Disk {
+	return &Disk{EntityHeader: db.EntityHeader{SchemaVersion: 1, State: db.StateCreated}}
 }
-func (m *DiskManager) Get(ctx context.Context, id ulid.ULID) (*db.Disk, error) {
+func (m *DiskManager) Get(ctx context.Context, id ulid.ULID) (*Disk, error) {
 	value, err := m.conn.RawRead(ctx, fmt.Sprintf("/minicloud/db/data/disk/%s", id))
 	if err != nil {
 		return nil, err
@@ -44,20 +44,16 @@ func (m *DiskManager) Get(ctx context.Context, id ulid.ULID) (*db.Disk, error) {
 	if value.Data == nil {
 		return nil, &db.NotFoundError{Entity: "Disk", Id: id}
 	}
-	entity := &db.Disk{}
-	origEntity := &db.Disk{}
+	entity := &Disk{}
 	if err := json.Unmarshal(value.Data, entity); err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(value.Data, origEntity); err != nil {
 		return nil, err
 	}
 	entity.CreateRev = value.CreateRev
 	entity.ModifyRev = value.ModifyRev
-	entity.Original = origEntity
+	entity.Original = entity.Copy()
 	return entity, nil
 }
-func (m *DiskManager) Create(ctx context.Context, entity *db.Disk, initiator db.Initiator) error {
+func (m *DiskManager) Create(ctx context.Context, entity *Disk, initiator db.Initiator) error {
 	entity.Id = utils.NewULID()
 	if err := DiskFSM.CheckInitialState(entity.State); err != nil {
 		return err
@@ -82,8 +78,8 @@ func (m *DiskManager) Create(ctx context.Context, entity *db.Disk, initiator db.
 	DiskFSM.Notify(ctx, txn, entity)
 	return txn.Commit(ctx)
 }
-func (m *DiskManager) Update(ctx context.Context, entity *db.Disk, initiator db.Initiator) error {
-	origEntity := entity.Original.(*db.Disk)
+func (m *DiskManager) Update(ctx context.Context, entity *Disk, initiator db.Initiator) error {
+	origEntity := entity.Original.(*Disk)
 	if err := DiskFSM.CheckTransition(origEntity.State, entity.State, initiator); err != nil {
 		return err
 	}

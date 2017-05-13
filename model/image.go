@@ -37,10 +37,10 @@ func Images(conn db.Connection) *ImageManager {
 
 var regexpImageName = regexp.MustCompile("^[a-zA-Z0-9_.:-]{3,200}$")
 
-func (m *ImageManager) NewEntity() *db.Image {
-	return &db.Image{EntityHeader: db.EntityHeader{SchemaVersion: 1, State: db.StateCreated}}
+func (m *ImageManager) NewEntity() *Image {
+	return &Image{EntityHeader: db.EntityHeader{SchemaVersion: 1, State: db.StateCreated}}
 }
-func (m *ImageManager) Get(ctx context.Context, id ulid.ULID) (*db.Image, error) {
+func (m *ImageManager) Get(ctx context.Context, id ulid.ULID) (*Image, error) {
 	value, err := m.conn.RawRead(ctx, fmt.Sprintf("/minicloud/db/data/image/%s", id))
 	if err != nil {
 		return nil, err
@@ -48,20 +48,16 @@ func (m *ImageManager) Get(ctx context.Context, id ulid.ULID) (*db.Image, error)
 	if value.Data == nil {
 		return nil, &db.NotFoundError{Entity: "Image", Id: id}
 	}
-	entity := &db.Image{}
-	origEntity := &db.Image{}
+	entity := &Image{}
 	if err := json.Unmarshal(value.Data, entity); err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(value.Data, origEntity); err != nil {
 		return nil, err
 	}
 	entity.CreateRev = value.CreateRev
 	entity.ModifyRev = value.ModifyRev
-	entity.Original = origEntity
+	entity.Original = entity.Copy()
 	return entity, nil
 }
-func (m *ImageManager) Create(ctx context.Context, entity *db.Image, initiator db.Initiator) error {
+func (m *ImageManager) Create(ctx context.Context, entity *Image, initiator db.Initiator) error {
 	entity.Id = utils.NewULID()
 	if err := ImageFSM.CheckInitialState(entity.State); err != nil {
 		return err
@@ -88,8 +84,8 @@ func (m *ImageManager) Create(ctx context.Context, entity *db.Image, initiator d
 	ImageFSM.Notify(ctx, txn, entity)
 	return txn.Commit(ctx)
 }
-func (m *ImageManager) Update(ctx context.Context, entity *db.Image, initiator db.Initiator) error {
-	origEntity := entity.Original.(*db.Image)
+func (m *ImageManager) Update(ctx context.Context, entity *Image, initiator db.Initiator) error {
+	origEntity := entity.Original.(*Image)
 	if err := ImageFSM.CheckTransition(origEntity.State, entity.State, initiator); err != nil {
 		return err
 	}

@@ -28,25 +28,25 @@ var DiskFSM *StateMachine
 
 func init() {
 	DiskFSM = NewStateMachine().
-			InitialState(db.StateCreated).
-			UserTransition(db.StateReady, db.StateUpdated).
-			UserTransition(db.StateReady, db.StateDeleting).
-			UserTransition(db.StateError, db.StateDeleting).
-			SystemTransition(db.StateCreated, db.StateReady).
-			SystemTransition(db.StateUpdated, db.StateReady).
-			SystemTransition(db.StateInUse, db.StateReady).
-			SystemTransition(db.StateReady, db.StateInUse).
-			SystemTransition(db.StateCreated, db.StateError).
-			SystemTransition(db.StateReady, db.StateError).
-			SystemTransition(db.StateUpdated, db.StateError).
-			SystemTransition(db.StateInUse, db.StateError).
-			Hook(db.StateCreated, HandleDiskCreated).
-			Hook(db.StateUpdated, HandleDiskUpdated).
-			Hook(db.StateDeleting, HandleDiskDeleting)
+		InitialState(db.StateCreated).
+		UserTransition(db.StateReady, db.StateUpdated).
+		UserTransition(db.StateReady, db.StateDeleting).
+		UserTransition(db.StateError, db.StateDeleting).
+		SystemTransition(db.StateCreated, db.StateReady).
+		SystemTransition(db.StateUpdated, db.StateReady).
+		SystemTransition(db.StateInUse, db.StateReady).
+		SystemTransition(db.StateReady, db.StateInUse).
+		SystemTransition(db.StateCreated, db.StateError).
+		SystemTransition(db.StateReady, db.StateError).
+		SystemTransition(db.StateUpdated, db.StateError).
+		SystemTransition(db.StateInUse, db.StateError).
+		Hook(db.StateCreated, HandleDiskCreated).
+		Hook(db.StateUpdated, HandleDiskUpdated).
+		Hook(db.StateDeleting, HandleDiskDeleting)
 }
 
 func HandleDiskCreated(ctx context.Context, conn db.Connection, entity db.Entity) {
-	disk := entity.(*db.Disk)
+	disk := entity.(*Disk)
 	var err error
 	if disk.ImageId != utils.Zero {
 		err = ceph.CreateDiskFromImage(ctx, disk.Pool, disk.Id.String(), "images", disk.ImageId.String(), "base", disk.Size)
@@ -65,7 +65,7 @@ func HandleDiskCreated(ctx context.Context, conn db.Connection, entity db.Entity
 }
 
 func HandleDiskUpdated(ctx context.Context, conn db.Connection, entity db.Entity) {
-	disk := entity.(*db.Disk)
+	disk := entity.(*Disk)
 	if err := ceph.ResizeDisk(ctx, disk.Pool, disk.Id.String(), disk.Size); err != nil {
 		logger.Debug(ctx, "setting disk state to error", "id", disk.Id, "cause", err)
 		disk.State = db.StateError
@@ -78,7 +78,7 @@ func HandleDiskUpdated(ctx context.Context, conn db.Connection, entity db.Entity
 }
 
 func HandleDiskDeleting(ctx context.Context, conn db.Connection, entity db.Entity) {
-	disk := entity.(*db.Disk)
+	disk := entity.(*Disk)
 	diskManager := Disks(conn)
 	if err := ceph.DeleteDisk(ctx, disk.Pool, disk.Id.String()); err != nil {
 		logger.Debug(ctx, "setting disk state to error", "id", disk.Id, "cause", err)
