@@ -28,18 +28,19 @@ var ImageFSM *StateMachine
 
 func init() {
 	ImageFSM = NewStateMachine().
-			InitialState(db.StateCreated).
-			UserTransition(db.StateCreated, db.StateCreated). // Allow update in created state
-			UserTransition(db.StateReady, db.StateReady).     // Allow update in ready state
-			UserTransition(db.StateReady, db.StateDeleting).
-			UserTransition(db.StateCreated, db.StateDeleting).
-			UserTransition(db.StateError, db.StateDeleting).
-			SystemTransition(db.StateCreated, db.StateUploading).
-			SystemTransition(db.StateUploading, db.StateReady).
-			SystemTransition(db.StateCreated, db.StateError).
-			SystemTransition(db.StateUploading, db.StateError).
-			SystemTransition(db.StateDeleting, db.StateDeleted).
-			Hook(db.StateDeleting, HandleImageDeleting)
+		InitialState(db.StateCreated).
+		UserTransition(db.StateCreated, db.StateCreated). // Allow update in created state
+		UserTransition(db.StateReady, db.StateReady).     // Allow update in ready state
+		UserTransition(db.StateReady, db.StateDeleting).
+		UserTransition(db.StateCreated, db.StateDeleting).
+		UserTransition(db.StateError, db.StateDeleting).
+		SystemTransition(db.StateCreated, db.StateUploading).
+		SystemTransition(db.StateUploading, db.StateReady).
+		SystemTransition(db.StateCreated, db.StateError).
+		SystemTransition(db.StateUploading, db.StateError).
+		SystemTransition(db.StateDeleting, db.StateDeleted).
+		SystemTransition(db.StateDeleting, db.StateError).
+		Hook(db.StateDeleting, HandleImageDeleting)
 }
 
 func HandleImageDeleting(ctx context.Context, conn db.Connection, entity db.Entity) {

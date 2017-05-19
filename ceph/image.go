@@ -91,13 +91,23 @@ func DeleteImage(ctx context.Context, pool, name string) error {
 	opCtx := log.WithValues(ctx, "pool", pool, "name", name)
 
 	// Create connection; defer shutdown
-	conn, err := NewConnection(ctx)
+	conn, err := NewConnection(ctx, pool)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
 	img := rbd.GetImage(conn.ioctx[pool], name)
+	if err := img.Open(); err != nil {
+		if err == rbd.RbdErrorNotFound {
+			// Image don't exists in Ceph
+			return nil
+		}
+		logger.Error(opCtx, "failed to open image", "error", err)
+		return err
+	}
+	defer img.Close()
+
 	snapNames, err := img.GetSnapshotNames()
 	if err != nil {
 		logger.Error(opCtx, "failed to get snapshot list", "error", err)
@@ -125,6 +135,10 @@ func DeleteImage(ctx context.Context, pool, name string) error {
 	}
 
 	// Remove the image
+	if err := img.Close(); err != nil {
+		logger.Error(opCtx, "failed to close image before remove", "error", err)
+		return err
+	}
 	if err := img.Remove(); err != nil {
 		logger.Error(opCtx, "failed to remove image", "error", err)
 		return err

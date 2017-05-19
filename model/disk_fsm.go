@@ -40,6 +40,7 @@ func init() {
 		SystemTransition(db.StateReady, db.StateError).
 		SystemTransition(db.StateUpdated, db.StateError).
 		SystemTransition(db.StateInUse, db.StateError).
+		SystemTransition(db.StateDeleting, db.StateDeleted).
 		Hook(db.StateCreated, HandleDiskCreated).
 		Hook(db.StateUpdated, HandleDiskUpdated).
 		Hook(db.StateDeleting, HandleDiskDeleting)

@@ -23,4 +23,5 @@ const (
 	HeaderContentType = "Content-Type"
 
 	ContentTypePlaintext = "text/plain"
+	ContentTypeJson      = "application/json"
 )

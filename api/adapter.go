@@ -94,6 +94,7 @@ func (mh *managerHandlers) handleList(ctx context.Context, w http.ResponseWriter
 		writeError(w, err)
 		return
 	}
+	w.Header().Set(HeaderContentType, ContentTypeJson)
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
 }
@@ -124,6 +125,7 @@ func (mh *managerHandlers) handleGet(ctx context.Context, w http.ResponseWriter,
 		writeError(w, err)
 		return
 	}
+	w.Header().Set(HeaderContentType, ContentTypeJson)
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
 }

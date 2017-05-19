@@ -18,6 +18,8 @@
 package api
 
 import (
+	"encoding/json"
+	"github.com/antonf/minicloud/db"
 	"github.com/oklog/ulid"
 	"net/http"
 	"reflect"
@@ -58,11 +60,29 @@ func nextLen(chain *link) int {
 
 func writeError(w http.ResponseWriter, err error) {
 	// TODO: respond with different status codes depending on error
-	w.Header().Add(HeaderContentType, ContentTypePlaintext)
-	w.WriteHeader(http.StatusInternalServerError)
-	w.Write([]byte("Error: "))
-	w.Write([]byte(err.Error()))
-	w.Write([]byte("\n"))
+	enc := json.NewEncoder(w)
+	switch err.(type) {
+	case *db.ConflictError:
+		w.Header().Add(HeaderContentType, ContentTypeJson)
+		w.WriteHeader(http.StatusConflict)
+	case *db.FieldError:
+		w.Header().Add(HeaderContentType, ContentTypeJson)
+		w.WriteHeader(http.StatusBadRequest)
+	case *db.NotFoundError:
+		w.Header().Add(HeaderContentType, ContentTypeJson)
+		w.WriteHeader(http.StatusNotFound)
+	default:
+		w.Header().Add(HeaderContentType, ContentTypePlaintext)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Error: "))
+		w.Write([]byte(err.Error()))
+		w.Write([]byte("\n"))
+		return
+	}
+
+	if err := enc.Encode(err); err != nil {
+		logger.Error(nil, "failed convert error to json", "error", err)
+	}
 }
 
 func toError(rv reflect.Value) error {

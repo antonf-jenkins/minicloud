@@ -41,13 +41,22 @@ var (
 			return Servers(conn).Get(ctx, id)
 		},
 	}
-	machines = map[string]*StateMachine{
-		"disk":   DiskFSM,
-		"server": ServerFSM,
-	}
 )
 
 const prefix = db.MetaPrefix + "/notify-fsm/"
+
+func getStateMachine(name string) *StateMachine {
+	switch name {
+	case "disk":
+		return DiskFSM
+	case "server":
+		return ServerFSM
+	case "image":
+		return ImageFSM
+	default:
+		return nil
+	}
+}
 
 func WatchNotifications(ctx context.Context, conn db.Connection) error {
 	notifyCh := conn.RawWatchPrefix(ctx, prefix)
@@ -247,7 +256,7 @@ func (wrk *worker) processJob(ctx context.Context, job *job) {
 				"error", err)
 			return
 		}
-		if stateMachine := machines[entityName]; stateMachine != nil {
+		if stateMachine := getStateMachine(entityName); stateMachine != nil {
 			stateMachine.InvokeHook(ctx, wrk.conn, entity)
 		} else {
 			logger.Error(ctx, "no machine for entity", "entity_name", entityName)
