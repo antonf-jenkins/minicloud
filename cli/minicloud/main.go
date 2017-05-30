@@ -24,17 +24,14 @@ import (
 	"github.com/antonf/minicloud/db/dbimpl"
 	"github.com/antonf/minicloud/log"
 	"github.com/antonf/minicloud/model"
-	"github.com/antonf/minicloud/qemu"
-	"github.com/antonf/minicloud/utils"
 	"net/http"
 	"os"
-	"time"
 )
 
 func main() {
 	ctx := context.Background()
 	log.Initialize(ctx)
-	logger := log.New("main")
+	//logger := log.New("main")
 
 	conn, err := dbimpl.NewConnection(ctx, 1)
 	if err != nil {
@@ -58,44 +55,5 @@ func main() {
 		})
 	apiServer.MountPoint("/flavors").MountManager(model.Flavors(conn))
 	apiServer.MountPoint("/servers").MountManager(model.Servers(conn))
-	http.ListenAndServe("127.0.0.1:1959", apiServer)
-	os.Exit(0)
-
-	x := qemu.VirtualMachine{
-		Id:       utils.NewULID(),
-		Cpu:      "host",
-		MemLock:  true,
-		VhostNet: true,
-		Disks: []qemu.StorageDevice{
-			{Pool: "root", Disk: "test1", Cache: qemu.CacheWriteBack},
-		},
-		NICs: []qemu.NetworkDevice{
-			{MacAddress: "52:54:00:1a:5d:f7", InterfaceName: "tap1a5df7"},
-		},
-		Root:    "/home/anton/vm",
-		VncPort: 0,
-	}
-
-	if err := x.Start(ctx); err != nil {
-		logger.Fatal(ctx, "_", "error", err)
-	}
-
-	for i := 1; i < 5; i++ {
-		if err := x.Monitor().Cont(ctx); err != nil {
-			logger.Fatal(ctx, "_", "error", err)
-		}
-		time.Sleep(30 * time.Second)
-		if err := x.Monitor().Stop(ctx); err != nil {
-			logger.Fatal(ctx, "_", "error", err)
-		}
-		time.Sleep(30 * time.Second)
-	}
-
-	if err := x.Monitor().Quit(ctx); err != nil {
-		logger.Fatal(ctx, "_", "error", err)
-	}
-
-	if err := x.Wait(); err != nil {
-		logger.Fatal(ctx, "Error while waiting", "error", err)
-	}
+	http.ListenAndServe("0.0.0.0:1959", apiServer)
 }
