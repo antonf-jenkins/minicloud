@@ -174,8 +174,11 @@ func init() {
 
 func InitOptions(ctx context.Context, conn db.Connection) {
 	rawValCh := conn.RawWatchPrefix(ctx, GlobalConfigPrefix)
+	logger.Info(ctx, "start to initialize options")
 	for _, opt := range options {
+		logger.Info(ctx, "initializing option", "name", opt.headerPtr().name)
 		initializeOpt(ctx, opt, conn)
 	}
+	logger.Info(ctx, "done initializing options")
 	go processConfigEvents(ctx, rawValCh)
 }
