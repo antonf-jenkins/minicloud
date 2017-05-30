@@ -30,7 +30,6 @@ pipeline {
         stage('Deploy Test Env') {
             steps {
                 unstash 'binary'
-                sh 'ls -la'
 
                 script {
                     def ipAddress = sh(returnStdout: true, script: 'sudo minicloud-ci-vm start "${BUILD_TAG}"').trim()
