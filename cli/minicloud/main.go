@@ -31,7 +31,6 @@ import (
 func main() {
 	ctx := context.Background()
 	log.Initialize(ctx)
-	//logger := log.New("main")
 
 	conn, err := dbimpl.NewConnection(ctx, 1)
 	if err != nil {
